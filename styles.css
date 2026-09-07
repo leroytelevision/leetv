@@ -1,44 +1,276 @@
+/* ---------------------------------------------------------------
+   leetv.tv — retro TV set
+   Layout unit: --u == 1% of the stage width. Every dimension below
+   is a multiple of --u, so the whole set scales as one piece.
+   Stage aspect ratio is 100 : 80 (see --aw / --ah).
+   --------------------------------------------------------------- */
+
 :root {
-  color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #111111;
-  --muted: #666666;
+  --aw: 100;
+  --ah: 80;
+
+  --pink-lit:  #ff7cc4;
+  --pink:      #ff3ea5;
+  --pink-mid:  #ec2189;
+  --pink-deep: #b9106a;
+  --pink-dark: #7d0a48;
+
+  --room-1: #1a1016;
+  --room-2: #0a0609;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111111;
-    --fg: #f2f2f2;
-    --muted: #999999;
-  }
-}
+* { box-sizing: border-box; }
 
-* {
-  box-sizing: border-box;
-}
+html, body { height: 100%; }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 90% at 50% 42%, var(--room-1) 0%, var(--room-2) 78%);
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- stage: fixed aspect box that always fits the viewport -------- */
+
+.stage {
+  /* 0.94 => the set occupies at most 94% of the limiting axis */
+  --u: min(0.94vw, 1.175vh);
+  width: calc(var(--u) * var(--aw));
+  height: calc(var(--u) * var(--ah));
+  position: relative;
+}
+
+@supports (height: 1svh) {
+  .stage { --u: min(0.94vw, 1.175svh); }
+}
+
+.tv { position: absolute; inset: 0; }
+
+/* --- cabinet ------------------------------------------------------ */
+
+.cabinet {
+  position: absolute;
+  top: 0; left: 0;
+  z-index: 2;
+  width: 100%;
+  height: calc(var(--u) * 66);
+  padding: calc(var(--u) * 6);
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-  text-align: center;
-  padding: 1.5rem;
+  gap: calc(var(--u) * 3);
+  border-radius: calc(var(--u) * 8) calc(var(--u) * 8) calc(var(--u) * 5) calc(var(--u) * 5);
+  background:
+    linear-gradient(158deg,
+      var(--pink-lit) 0%,
+      var(--pink) 26%,
+      var(--pink-mid) 62%,
+      var(--pink-deep) 88%,
+      var(--pink-dark) 100%);
+  box-shadow:
+    inset 0 calc(var(--u) * 0.7) 0 rgba(255, 255, 255, 0.42),
+    inset calc(var(--u) * 0.7) 0 0 rgba(255, 255, 255, 0.16),
+    inset 0 calc(var(--u) * -1.4) calc(var(--u) * 2) rgba(90, 5, 50, 0.55),
+    0 calc(var(--u) * 2) calc(var(--u) * 3) rgba(0, 0, 0, 0.35),
+    0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, 0.45);
 }
 
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: clamp(2.5rem, 12vw, 5rem);
-  letter-spacing: -0.03em;
+/* --- screen ------------------------------------------------------- */
+
+.screen-frame {
+  flex: 1 1 auto;
+  height: 100%;
+  padding: calc(var(--u) * 1.7);
+  border-radius: calc(var(--u) * 6) / calc(var(--u) * 7);
+  background: linear-gradient(160deg, #34343c 0%, #1b1b21 46%, #0d0d11 100%);
+  box-shadow:
+    inset 0 calc(var(--u) * 0.35) 0 rgba(255, 255, 255, 0.16),
+    inset 0 calc(var(--u) * -0.35) 0 rgba(0, 0, 0, 0.7),
+    0 0 0 calc(var(--u) * 0.4) rgba(120, 8, 66, 0.55),
+    0 calc(var(--u) * 0.8) calc(var(--u) * 1.6) rgba(0, 0, 0, 0.5);
 }
 
-p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 1rem;
-  letter-spacing: 0.02em;
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: calc(var(--u) * 4.6) / calc(var(--u) * 5.6);
+  background: #000;
+  box-shadow: inset 0 0 calc(var(--u) * 2.4) rgba(0, 0, 0, 0.95);
+}
+
+#tube {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* low internal res blown up: keep the pixels chunky, never smoothed */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.roll {
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 20%;
+  mix-blend-mode: screen;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.06) 28%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.05) 74%,
+    rgba(255, 255, 255, 0) 100%);
+  animation: roll 6.5s linear infinite;
+}
+
+@keyframes roll {
+  from { transform: translateY(-110%); }
+  to   { transform: translateY(510%); }
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.34) 0,
+    rgba(0, 0, 0, 0.34) calc(var(--u) * 0.16),
+    rgba(0, 0, 0, 0) calc(var(--u) * 0.16),
+    rgba(0, 0, 0, 0) calc(var(--u) * 0.4));
+}
+
+.glass {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(133deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0) 38%),
+    radial-gradient(118% 100% at 50% 48%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+/* --- control panel ------------------------------------------------ */
+
+.panel {
+  flex: 0 0 calc(var(--u) * 17);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 2.2);
+}
+
+.knob {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(var(--u) * 10.5);
+  height: calc(var(--u) * 10.5);
+  border-radius: 50%;
+  background:
+    radial-gradient(60% 60% at 36% 30%, #f3ecec 0%, #cdbfbf 26%, #8d7c7c 62%, #4a3d3d 100%);
+  box-shadow:
+    inset 0 calc(var(--u) * -0.5) calc(var(--u) * 0.7) rgba(0, 0, 0, 0.55),
+    inset 0 calc(var(--u) * 0.4) calc(var(--u) * 0.5) rgba(255, 255, 255, 0.75),
+    0 0 0 calc(var(--u) * 0.55) rgba(70, 4, 40, 0.5),
+    0 calc(var(--u) * 0.7) calc(var(--u) * 1.1) rgba(0, 0, 0, 0.5);
+}
+
+.knob__pointer {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  width: calc(var(--u) * 0.7);
+  height: 32%;
+  margin-left: calc(var(--u) * -0.35);
+  border-radius: calc(var(--u) * 0.35);
+  background: #2b2222;
+  box-shadow: 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.35);
+}
+
+.knob--tuner  { transform: rotate(-38deg); }
+.knob--volume { transform: rotate(64deg); }
+
+.grille {
+  width: 100%;
+  flex: 1 1 auto;
+  margin-top: calc(var(--u) * 0.4);
+  border-radius: calc(var(--u) * 1.6);
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(28, 6, 18, 0.92) 0,
+      rgba(28, 6, 18, 0.92) calc(var(--u) * 0.62),
+      rgba(255, 150, 205, 0.30) calc(var(--u) * 0.62),
+      rgba(255, 150, 205, 0.30) calc(var(--u) * 1.24));
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.35) rgba(90, 6, 52, 0.55),
+    inset 0 calc(var(--u) * 0.5) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.6),
+    0 calc(var(--u) * 0.25) 0 rgba(255, 255, 255, 0.22);
+}
+
+/* --- legs --------------------------------------------------------- */
+
+.legs {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--u) * 61);
+  left: 0;
+  width: 100%;
+  height: calc(var(--u) * 17);
+}
+
+.leg {
+  position: absolute;
+  top: 0;
+  width: calc(var(--u) * 3.2);
+  height: calc(var(--u) * 15);
+  transform-origin: 50% 0;
+  border-radius: 0 0 calc(var(--u) * 1.4) calc(var(--u) * 1.4);
+  background: linear-gradient(90deg, #2a1611 0%, #6d3d28 38%, #8a5236 58%, #331b13 100%);
+  box-shadow: 0 calc(var(--u) * 0.6) calc(var(--u) * 1) rgba(0, 0, 0, 0.5);
+}
+
+.leg--l { left:  13%; transform: rotate(-14deg); }
+.leg--r { right: 13%; transform: rotate(14deg); }
+
+.leg--back {
+  height: calc(var(--u) * 12);
+  filter: brightness(0.45);
+}
+
+.leg--bl { left:  25%; transform: rotate(-9deg); }
+.leg--br { right: 25%; transform: rotate(9deg); }
+
+.floor-shadow {
+  position: absolute;
+  z-index: 0;
+  left: 8%;
+  right: 8%;
+  top: calc(var(--u) * 73);
+  height: calc(var(--u) * 7);
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 72%);
+}
+
+/* --- reduced motion ----------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .roll { display: none; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

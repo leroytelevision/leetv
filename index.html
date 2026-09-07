@@ -3,14 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>leetv.tv</title>
+  <title>LEETV</title>
+  <meta name="description" content="leetv.tv — under construction">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <main>
-    <h1>leetv.tv</h1>
-    <p>under construction &middot; <time id="today">2026-09-07</time></p>
-  </main>
+  <h1 class="sr-only">LEETV</h1>
+
+  <div class="stage">
+    <div class="tv">
+
+      <div class="legs" aria-hidden="true">
+        <span class="leg leg--back leg--bl"></span>
+        <span class="leg leg--back leg--br"></span>
+        <span class="leg leg--l"></span>
+        <span class="leg leg--r"></span>
+      </div>
+
+      <div class="cabinet">
+        <div class="screen-frame">
+          <div class="screen">
+            <canvas id="tube" width="160" height="120" aria-hidden="true"></canvas>
+            <div class="roll" aria-hidden="true"></div>
+            <div class="scanlines" aria-hidden="true"></div>
+            <div class="glass" aria-hidden="true"></div>
+          </div>
+        </div>
+
+        <div class="panel" aria-hidden="true">
+          <div class="knob knob--tuner"><span class="knob__pointer"></span></div>
+          <div class="knob knob--volume"><span class="knob__pointer"></span></div>
+          <div class="grille"></div>
+        </div>
+      </div>
+
+      <div class="floor-shadow" aria-hidden="true"></div>
+    </div>
+  </div>
+
   <script src="script.js"></script>
 </body>
 </html>
