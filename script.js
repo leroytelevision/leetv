@@ -2027,6 +2027,303 @@
     g.fillRect(78.5, 12, 3, 92);
   }
 
+  /* ================================================================
+     FACES — one parametric head, driven by expression parameters.
+
+     Photoreal is not on the table at 160x120 through static, so this
+     aims at convincing anatomy instead: a shaded skull form, lids that
+     actually occlude the eye, brows that carry the expression, and a
+     mouth built from lips rather than a hole.
+     ================================================================ */
+
+  var LOOKS = [
+    { skin:'#f2cfae', lit:'#ffe6cd', dark:'#c69874', lip:'#c9736c', hair:'#3b2a1e', eye:'#5c7d4e', cloth:'#3d4f6b' },
+    { skin:'#e0ae86', lit:'#f6d0ae', dark:'#a97753', lip:'#b25f5c', hair:'#14100e', eye:'#4a3524', cloth:'#6b3d4f' },
+    { skin:'#a9724a', lit:'#c9926a', dark:'#734e30', lip:'#8e4a45', hair:'#120d0a', eye:'#3a2718', cloth:'#2f6b5f' },
+    { skin:'#7a4f33', lit:'#9a6b48', dark:'#4e3020', lip:'#6d3a36', hair:'#0e0a08', eye:'#2e1f14', cloth:'#c07a2a' },
+    { skin:'#f7ddc4', lit:'#fff0e2', dark:'#d0a888', lip:'#d1837c', hair:'#a8763c', eye:'#4a7fa8', cloth:'#4a6b3d' },
+    { skin:'#d8a882', lit:'#f0c6a2', dark:'#a1704c', lip:'#ad5f58', hair:'#5c3a20', eye:'#6b5a3a', cloth:'#7a4a8f' },
+    { skin:'#5f3d28', lit:'#7d5638', dark:'#3a2517', lip:'#5a2f2c', hair:'#0c0908', eye:'#241708', cloth:'#c8b23a' },
+    { skin:'#ecc3a0', lit:'#ffdcc0', dark:'#b98a66', lip:'#c06f68', hair:'#6e6e74', eye:'#5a6b78', cloth:'#546070' }
+  ];
+
+  function baseFace(i) {
+    return {
+      L: LOOKS[i % LOOKS.length],
+      hairStyle: i % 8,
+      eyeL: 1, eyeR: 1, gazeX: 0, gazeY: 0,
+      browL: 0, browR: 0, browY: 0,
+      open: 0, wide: 0, smile: 0, teeth: 0, tongue: 0, pucker: 0,
+      tilt: 0, bob: 0, turn: 0, scale: 1,
+      blush: 0, tears: 0, sweat: 0, glasses: 0, shades: 0,
+      cig: 0, bubble: 0, cup: 0, brush: 0, lipstick: 0, beard: 0, tache: 0
+    };
+  }
+
+  function drawFace(g, o) {
+    var L = o.L, cx = 80, cy = 56, hw = 38, hh = 46;
+    var tx = o.turn * 5;
+
+    g.save();
+    g.translate(cx, cy + o.bob);
+    g.rotate(o.tilt);
+    g.scale(o.scale, o.scale);
+    g.translate(-cx, -cy);
+
+    /* shoulders and neck sit behind everything */
+    g.fillStyle = L.cloth;
+    ell(g, cx + tx * 0.4, 132, 62, 34);
+    g.fillStyle = L.dark;
+    g.fillRect(cx - 15 + tx, cy + 24, 30, 28);
+
+    /* hair mass behind the head, for the longer styles */
+    if (o.hairStyle === 2 || o.hairStyle === 5) {
+      g.fillStyle = L.hair;
+      ell(g, cx + tx, cy + 6, hw + 9, hh + 10);
+    }
+
+    g.fillStyle = L.hair;                        /* ears */
+    g.fillStyle = L.skin;
+    ell(g, cx - hw + 2 + tx, cy + 6, 6, 10);
+    ell(g, cx + hw - 2 + tx, cy + 6, 6, 10);
+    g.fillStyle = L.dark;
+    ell(g, cx - hw + 2 + tx, cy + 6, 3, 5);
+    ell(g, cx + hw - 2 + tx, cy + 6, 3, 5);
+
+    /* the head: cranium into a tapering jaw, lit from upper left */
+    var grad = g.createRadialGradient(cx - 13 + tx, cy - 20, 5, cx + tx, cy + 6, 60);
+    grad.addColorStop(0, L.lit);
+    grad.addColorStop(0.42, L.skin);
+    grad.addColorStop(1, L.dark);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.moveTo(cx - hw + tx, cy - 6);
+    g.bezierCurveTo(cx - hw + tx, cy - hh - 8 + tx, cx + hw + tx, cy - hh - 8, cx + hw + tx, cy - 6);
+    g.bezierCurveTo(cx + hw - 3 + tx, cy + 30, cx + 15 + tx, cy + 48, cx + tx, cy + 48);
+    g.bezierCurveTo(cx - 15 + tx, cy + 48, cx - hw + 3 + tx, cy + 30, cx - hw + tx, cy - 6);
+    g.closePath();
+    g.fill();
+
+    /* features carry their own modelling; the halo is for the silhouette */
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+
+    var eyY = cy + 2, eyDx = 16;
+
+    /* brow ridge and cheek shading */
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    ell(g, cx - eyDx + tx, eyY - 2, 15, 9);
+    ell(g, cx + eyDx + tx, eyY - 2, 15, 9);
+    ell(g, cx + tx, cy + 34, 20, 10);
+
+    /* eyes */
+    for (var e = 0; e < 2; e++) {
+      var s = e ? 1 : -1;
+      var ex = cx + s * eyDx + tx;
+      var op = e ? o.eyeR : o.eyeL;
+      var lidH = 8 * op;
+
+      g.fillStyle = '#f4f1ea';
+      ell(g, ex, eyY, 11, Math.max(0.4, lidH));
+
+      if (op > 0.12) {
+        var ix = ex + o.gazeX * 3.4, iy = eyY + o.gazeY * 2.2;
+        g.fillStyle = L.eye;
+        ell(g, ix, iy, 5.4, Math.min(5.4, lidH * 0.92));
+        g.fillStyle = '#0d0b0c';
+        ell(g, ix, iy, 2.6, Math.min(2.6, lidH * 0.6));
+        g.fillStyle = 'rgba(255,255,255,0.92)';
+        ell(g, ix - 2, iy - 2, 1.5, 1.2);
+      }
+      /* Upper lid rests ON the opening rather than over it: its lower
+         edge sits exactly at the top of the aperture, so closing the
+         eye sweeps the lid down instead of hiding the eye entirely. */
+      g.fillStyle = L.skin;
+      ell(g, ex, eyY - 8 - lidH, 12, 8);
+      g.fillStyle = 'rgba(60,35,25,0.6)';         /* lash line */
+      ell(g, ex, eyY - lidH, 11, 1.2);
+      g.fillStyle = 'rgba(90,60,45,0.30)';        /* lower lid */
+      ell(g, ex, eyY + lidH + 1, 10, 1);
+
+      /* brow */
+      g.save();
+      g.translate(ex, eyY - 15 + o.browY + (e ? o.browR : o.browL) * 5);
+      g.rotate(s * ((e ? o.browR : o.browL) * 0.28));
+      g.fillStyle = L.hair;
+      ell(g, 0, 0, 12, 2.8);
+      g.restore();
+    }
+
+    /* nose: a shaded bridge, a lit tip, two nostrils */
+    g.fillStyle = 'rgba(0,0,0,0.13)';
+    ell(g, cx + 4 + tx, cy + 12, 5, 13);
+    g.fillStyle = 'rgba(255,255,255,0.16)';
+    ell(g, cx - 2 + tx, cy + 8, 3.4, 11);
+    g.fillStyle = L.lit;
+    ell(g, cx + tx, cy + 19, 6, 4.5);
+    g.fillStyle = 'rgba(40,20,14,0.55)';
+    ell(g, cx - 4.6 + tx, cy + 21, 2.2, 1.5);
+    ell(g, cx + 4.6 + tx, cy + 21, 2.2, 1.5);
+
+    /* mouth: outer lip shape, inner cavity, teeth, tongue */
+    var my = cy + 33, mw = 13 + o.wide * 9, mh = o.open * 12;
+    var corner = -o.smile * 5;
+    if (o.pucker) { mw = 7; }
+
+    g.fillStyle = L.lip;
+    g.beginPath();
+    g.moveTo(cx - mw + tx, my + corner);
+    g.quadraticCurveTo(cx + tx, my - mh - 7 - o.smile * 2, cx + mw + tx, my + corner);
+    g.quadraticCurveTo(cx + tx, my + mh + 9 + o.smile * 1.5, cx - mw + tx, my + corner);
+    g.closePath();
+    g.fill();
+
+    if (mh > 1.2) {
+      g.fillStyle = '#3a1418';
+      g.beginPath();
+      g.moveTo(cx - mw + 3 + tx, my + corner);
+      g.quadraticCurveTo(cx + tx, my - mh - 2, cx + mw - 3 + tx, my + corner);
+      g.quadraticCurveTo(cx + tx, my + mh + 4, cx - mw + 3 + tx, my + corner);
+      g.closePath();
+      g.fill();
+      if (o.teeth) {
+        g.fillStyle = '#f2efe4';
+        g.fillRect(cx - mw + 4 + tx, my + corner - Math.min(5, mh), (mw - 4) * 2, Math.min(4.5, mh * 0.7));
+      }
+      if (o.tongue) {
+        g.fillStyle = '#c9565f';
+        ell(g, cx + tx, my + corner + mh * 0.55, mw * 0.55, mh * 0.42);
+      }
+    } else if (o.smile > 0.2) {
+      g.strokeStyle = 'rgba(90,40,40,0.6)'; g.lineWidth = 1.4;
+      g.beginPath();
+      g.moveTo(cx - mw + tx, my + corner);
+      g.quadraticCurveTo(cx + tx, my + 3, cx + mw + tx, my + corner);
+      g.stroke();
+    }
+
+    /* facial hair */
+    if (o.tache) { g.fillStyle = L.hair; ell(g, cx + tx, my - 9, 13, 3.6); }
+    if (o.beard) {
+      g.fillStyle = L.hair;
+      g.beginPath();
+      g.moveTo(cx - 26 + tx, cy + 18);
+      g.quadraticCurveTo(cx + tx, cy + 58, cx + 26 + tx, cy + 18);
+      g.quadraticCurveTo(cx + tx, cy + 34, cx - 26 + tx, cy + 18);
+      g.fill();
+    }
+
+    /* hair in front */
+    g.fillStyle = L.hair;
+    var hs = o.hairStyle;
+    if (hs === 0) {                                   /* short crop */
+      g.beginPath(); g.ellipse(cx + tx, cy - 24, hw - 1, 24, 0, Math.PI, TAU); g.fill();
+      g.fillRect(cx - hw + 1 + tx, cy - 26, hw * 2 - 2, 7);
+    } else if (hs === 1) {                            /* side parting */
+      g.beginPath(); g.ellipse(cx + tx, cy - 23, hw - 1, 23, 0, Math.PI, TAU); g.fill();
+      g.beginPath();
+      g.moveTo(cx - hw + 1 + tx, cy - 22);
+      g.quadraticCurveTo(cx - 6 + tx, cy - 14, cx + 22 + tx, cy - 24);
+      g.quadraticCurveTo(cx + 4 + tx, cy - 34, cx - hw + 1 + tx, cy - 22);
+      g.fill();
+    } else if (hs === 2) {                            /* long */
+      g.beginPath(); g.ellipse(cx + tx, cy - 22, hw, 24, 0, Math.PI, TAU); g.fill();
+      g.fillRect(cx - hw - 7 + tx, cy - 20, 10, 54);
+      g.fillRect(cx + hw - 3 + tx, cy - 20, 10, 54);
+    } else if (hs === 3) {                            /* bun */
+      g.beginPath(); g.ellipse(cx + tx, cy - 24, hw - 2, 22, 0, Math.PI, TAU); g.fill();
+      ell(g, cx + tx, cy - 46, 12, 10);
+    } else if (hs === 4) {                            /* curls */
+      for (var k = 0; k < 9; k++) {
+        var a = Math.PI + k * Math.PI / 8;
+        ell(g, cx + tx + Math.cos(a) * (hw - 4), cy - 20 + Math.sin(a) * 24, 9, 9);
+      }
+    } else if (hs === 5) {                            /* bob */
+      g.beginPath(); g.ellipse(cx + tx, cy - 20, hw + 1, 24, 0, Math.PI, TAU); g.fill();
+      g.fillRect(cx - hw - 4 + tx, cy - 18, 9, 34);
+      g.fillRect(cx + hw - 5 + tx, cy - 18, 9, 34);
+    } else if (hs === 6) {                            /* receding */
+      g.beginPath(); g.ellipse(cx + tx, cy - 26, hw - 6, 16, 0, Math.PI, TAU); g.fill();
+      g.fillRect(cx - hw + 1 + tx, cy - 26, 7, 16);
+      g.fillRect(cx + hw - 8 + tx, cy - 26, 7, 16);
+    } else {                                          /* cropped/high top */
+      g.beginPath(); g.ellipse(cx + tx, cy - 22, hw - 4, 18, 0, Math.PI, TAU); g.fill();
+      g.fillRect(cx - 12 + tx, cy - 50, 24, 14);
+    }
+
+    /* extras */
+    if (o.blush) {
+      g.fillStyle = 'rgba(220,90,100,' + (0.35 * o.blush).toFixed(2) + ')';
+      ell(g, cx - 24 + tx, cy + 16, 10, 7); ell(g, cx + 24 + tx, cy + 16, 10, 7);
+    }
+    if (o.glasses || o.shades) {
+      g.fillStyle = o.shades ? 'rgba(18,18,24,0.92)' : 'rgba(190,220,240,0.30)';
+      var gy = eyY + (o.shades ? o.shades - 1 : 0) * 14;
+      ell(g, cx - eyDx + tx, gy, 14, 10); ell(g, cx + eyDx + tx, gy, 14, 10);
+      g.fillStyle = '#2b2b33';
+      g.fillRect(cx - 6 + tx, gy - 1, 12, 2.4);
+      g.fillRect(cx - eyDx - 14 + tx, gy - 1, 4, 2.4);
+      g.fillRect(cx + eyDx + 10 + tx, gy - 1, 4, 2.4);
+    }
+    if (o.tears) {
+      g.fillStyle = 'rgba(150,215,255,0.85)';
+      for (var d = 0; d < 2; d++) {
+        var dy = eyY + 8 + ((o.tears * 40 + d * 18) % 42);
+        ell(g, cx - eyDx - 6 + tx, dy, 2.4, 3.6);
+        ell(g, cx + eyDx + 6 + tx, dy - 8, 2.4, 3.6);
+      }
+    }
+    if (o.sweat) {
+      g.fillStyle = 'rgba(170,225,255,0.9)';
+      for (var w = 0; w < 3; w++) {
+        var wy = cy - 28 + ((o.sweat * 50 + w * 20) % 46);
+        ell(g, cx - hw + 2 + tx, wy, 2.6, 4);
+      }
+    }
+    if (o.cig) {
+      g.fillStyle = '#efe9dc';
+      g.fillRect(cx + mw + tx, my - 2, 20, 4);
+      g.fillStyle = '#d8663a';
+      g.fillRect(cx + mw + 20 + tx, my - 2, 4, 4);
+      for (var sm = 0; sm < 4; sm++) {
+        g.fillStyle = 'rgba(210,210,215,' + (0.30 - sm * 0.06).toFixed(2) + ')';
+        ell(g, cx + mw + 24 + tx + sm * 3, my - 8 - sm * 7 - o.cig * 6, 4 + sm * 2, 3 + sm * 1.6);
+      }
+    }
+    if (o.bubble > 0.02) {
+      g.fillStyle = 'rgba(255,150,190,0.72)';
+      ell(g, cx + tx, my + 10 + o.bubble * 16, o.bubble * 26, o.bubble * 24);
+      g.fillStyle = 'rgba(255,255,255,0.5)';
+      ell(g, cx - o.bubble * 9 + tx, my + 4 + o.bubble * 12, o.bubble * 6, o.bubble * 4);
+    }
+    if (o.cup) {
+      g.fillStyle = '#d8d2c6';
+      g.fillRect(cx - 16 + tx, my - 4 + (1 - o.cup) * 26, 32, 30);
+      g.fillStyle = '#b8b0a2';
+      g.fillRect(cx - 16 + tx, my - 4 + (1 - o.cup) * 26, 32, 5);
+      ring(g, cx + 20 + tx, my + 12 + (1 - o.cup) * 26, 7, 3, '#d8d2c6');
+    }
+    if (o.brush) {
+      g.save();
+      g.translate(cx + tx, my + 4);
+      g.rotate(Math.sin(o.brush * 9) * 0.5);
+      g.fillStyle = '#3fa8d8'; g.fillRect(-3, 0, 6, 34);
+      g.fillStyle = '#f2f2ee'; g.fillRect(-7, -6, 14, 7);
+      g.restore();
+      g.fillStyle = 'rgba(245,250,255,0.85)';
+      ell(g, cx - 10 + tx, my - 2, 5, 4); ell(g, cx + 11 + tx, my + 2, 4, 3.4);
+    }
+    if (o.lipstick) {
+      g.save();
+      g.translate(cx + 20 + tx - o.lipstick * 18, my + 6);
+      g.rotate(-0.5);
+      g.fillStyle = '#2b2b33'; g.fillRect(-4, 0, 8, 18);
+      g.fillStyle = '#d0304a'; g.fillRect(-3, -8, 6, 9);
+      g.restore();
+    }
+    g.restore();
+  }
+
   /* ================================================================ */
 
   var CHANNELS = [
@@ -2114,6 +2411,309 @@
     { name: 'Cretan labyrinth',     draw: drawLabyrinth },
     { name: 'Chakra column',        draw: drawChakras }
   ];
+
+  /* Each entry animates the parameters; the renderer does the anatomy. */
+  var FACES = [
+    ['Blinking', function (o, t) {
+      var b = Math.sin(t * 0.0016);
+      o.eyeL = o.eyeR = b > 0.86 ? Math.max(0.04, (1 - b) * 7) : 1;
+      o.gazeX = Math.sin(t * 0.0006) * 0.4;
+    }],
+    ['Winking', function (o, t) {
+      var c = (t % 2600) / 2600;
+      o.eyeR = c > 0.72 && c < 0.86 ? 0.05 : 1;
+      o.smile = c > 0.7 && c < 0.9 ? 0.7 : 0.25;
+      o.browR = c > 0.72 && c < 0.86 ? -0.5 : 0;
+    }],
+    ['Yawning', function (o, t) {
+      var c = (t % 4200) / 4200;
+      var y = c < 0.55 ? Math.sin(c / 0.55 * Math.PI) : 0;
+      o.open = y; o.wide = y * 0.3; o.teeth = y > 0.5 ? 1 : 0; o.tongue = y > 0.6 ? 1 : 0;
+      o.eyeL = o.eyeR = 1 - y * 0.94; o.browY = -y * 4; o.tilt = -y * 0.12;
+    }],
+    ['Laughing', function (o, t) {
+      var l = Math.abs(Math.sin(t * 0.0075));
+      o.open = 0.35 + l * 0.5; o.wide = 0.7; o.smile = 1; o.teeth = 1; o.tongue = l > 0.6 ? 1 : 0;
+      o.eyeL = o.eyeR = 0.28; o.bob = l * 4; o.tilt = Math.sin(t * 0.0075) * 0.07;
+    }],
+    ['Crying', function (o, t) {
+      o.tears = (t % 3000) / 3000;
+      o.browL = 0.7; o.browR = 0.7; o.browY = -2;
+      o.eyeL = o.eyeR = 0.35 + Math.sin(t * 0.004) * 0.12;
+      o.open = 0.4; o.smile = -0.9; o.wide = 0.2; o.bob = Math.sin(t * 0.006) * 2;
+    }],
+    ['Sneezing', function (o, t) {
+      var c = (t % 3000) / 3000;
+      if (c < 0.62) { var b = c / 0.62;
+        o.eyeL = o.eyeR = 1 - b * 0.7; o.browY = -b * 3; o.tilt = -b * 0.16; o.open = b * 0.25;
+      } else { var a = (c - 0.62) / 0.38;
+        o.eyeL = o.eyeR = 0.04; o.open = (1 - a) * 0.95; o.wide = 0.5; o.teeth = 1;
+        o.tilt = 0.22 * (1 - a); o.bob = 6 * (1 - a); }
+    }],
+    ['Whistling', function (o, t) {
+      o.pucker = 1; o.open = 0.22; o.browY = -3;
+      o.eyeL = o.eyeR = 0.7; o.gazeX = Math.sin(t * 0.0014) * 0.7;
+      o.tilt = Math.sin(t * 0.002) * 0.05;
+    }],
+    ['Chewing gum', function (o, t) {
+      var c = Math.sin(t * 0.008);
+      o.open = 0.12 + Math.abs(c) * 0.2; o.turn = c * 0.35; o.smile = 0.2;
+      o.eyeL = o.eyeR = 0.85;
+    }],
+    ['Blowing a bubble', function (o, t) {
+      var c = (t % 4600) / 4600;
+      o.bubble = c < 0.78 ? c / 0.78 : 0;
+      o.open = 0.2; o.pucker = c < 0.78 ? 1 : 0;
+      o.eyeL = o.eyeR = c > 0.72 && c < 0.82 ? 0.2 : 0.9;
+    }],
+    ['Smoking', function (o, t) {
+      var c = (t % 3800) / 3800;
+      o.cig = 1 + Math.sin(t * 0.002) * 0.5;
+      o.open = c < 0.2 ? 0.1 : 0.02; o.pucker = c < 0.2 ? 1 : 0;
+      o.eyeL = o.eyeR = 0.6; o.gazeY = -0.4; o.tilt = 0.05;
+    }],
+    ['Sipping tea', function (o, t) {
+      var c = (t % 4400) / 4400;
+      o.cup = c < 0.62 ? Math.min(1, c / 0.3) : Math.max(0, 1 - (c - 0.62) / 0.25);
+      o.eyeL = o.eyeR = o.cup > 0.6 ? 0.35 : 0.9;
+      o.tilt = -o.cup * 0.1; o.open = o.cup > 0.8 ? 0.2 : 0;
+    }],
+    ['Eating', function (o, t) {
+      var c = Math.abs(Math.sin(t * 0.006));
+      o.open = c * 0.55; o.teeth = 1; o.wide = 0.2;
+      o.eyeL = o.eyeR = 0.8 - c * 0.3; o.bob = c * 2;
+    }],
+    ['Tongue out', function (o, t) {
+      o.open = 0.5; o.tongue = 1; o.wide = 0.4;
+      o.eyeL = o.eyeR = 0.3; o.smile = 0.5;
+      o.tilt = Math.sin(t * 0.003) * 0.08;
+    }],
+    ['Raised eyebrow', function (o, t) {
+      var c = Math.sin(t * 0.0018);
+      o.browR = c > 0 ? -c * 1.4 : 0; o.eyeR = 1; o.eyeL = 0.8;
+      o.smile = 0.3; o.gazeX = 0.2;
+    }],
+    ['Scowling', function (o, t) {
+      o.browL = -1; o.browR = -1; o.browY = 4;
+      o.eyeL = o.eyeR = 0.55; o.smile = -0.8; o.open = 0.05;
+      o.turn = Math.sin(t * 0.001) * 0.2;
+    }],
+    ['Shy smile', function (o, t) {
+      o.smile = 0.6; o.blush = 0.7 + Math.sin(t * 0.003) * 0.3;
+      o.gazeY = 0.7; o.gazeX = -0.5; o.eyeL = o.eyeR = 0.7;
+      o.tilt = 0.1;
+    }],
+    ['Screaming', function (o, t) {
+      var s = 0.7 + Math.abs(Math.sin(t * 0.01)) * 0.3;
+      o.open = s; o.wide = 0.6; o.teeth = 1; o.tongue = 1;
+      o.eyeL = o.eyeR = 1; o.browY = -5; o.browL = 0.5; o.browR = 0.5;
+      o.bob = Math.sin(t * 0.02) * 2;
+    }],
+    ['Whispering', function (o, t) {
+      o.open = 0.12 + Math.abs(Math.sin(t * 0.012)) * 0.1;
+      o.pucker = 1; o.turn = 0.6; o.gazeX = -0.8;
+      o.eyeL = o.eyeR = 0.75;
+    }],
+    ['Singing', function (o, t) {
+      var s = 0.35 + Math.abs(Math.sin(t * 0.0035)) * 0.5;
+      o.open = s; o.wide = 0.2 + s * 0.3; o.tongue = 1;
+      o.eyeL = o.eyeR = 0.4; o.browY = -3; o.bob = Math.sin(t * 0.0035) * 3;
+      o.tilt = Math.sin(t * 0.0018) * 0.1;
+    }],
+    ['Talking', function (o, t) {
+      o.open = 0.1 + Math.abs(Math.sin(t * 0.014)) * 0.35;
+      o.wide = 0.2 + Math.sin(t * 0.009) * 0.2; o.teeth = 1;
+      o.eyeL = o.eyeR = 0.9; o.gazeX = Math.sin(t * 0.0011) * 0.5;
+      o.browY = Math.sin(t * 0.006) * 2;
+    }],
+    ['Falling asleep', function (o, t) {
+      var c = (t % 6000) / 6000;
+      var d = c < 0.85 ? c / 0.85 : 0;
+      o.eyeL = o.eyeR = 1 - d * 0.97;
+      o.tilt = d * 0.34; o.bob = d * 8; o.open = d * 0.2;
+      o.browY = d * 3;
+    }],
+    ['Waking with a start', function (o, t) {
+      var c = (t % 4000) / 4000;
+      if (c < 0.7) { o.eyeL = o.eyeR = 0.05; o.tilt = 0.3; o.bob = 7; o.open = 0.15; }
+      else { var a = Math.min(1, (c - 0.7) / 0.08);
+        o.eyeL = o.eyeR = a; o.tilt = 0.3 * (1 - a); o.bob = 7 * (1 - a);
+        o.open = a * 0.5; o.browY = -a * 5; }
+    }],
+    ['Shifty eyes', function (o, t) {
+      var s = Math.floor(t / 700) % 4;
+      o.gazeX = s === 0 ? -1 : s === 1 ? 0 : s === 2 ? 1 : 0;
+      o.eyeL = o.eyeR = 0.8; o.smile = -0.1; o.browY = 1;
+      o.turn = o.gazeX * 0.15;
+    }],
+    ['Rolling eyes', function (o, t) {
+      var a = t * 0.004;
+      o.gazeX = Math.cos(a); o.gazeY = Math.sin(a) * 0.9;
+      o.eyeL = o.eyeR = 0.95; o.smile = -0.3; o.browY = -2;
+    }],
+    ['Blowing a kiss', function (o, t) {
+      var c = (t % 3200) / 3200;
+      o.pucker = c < 0.5 ? 1 : 0; o.open = c < 0.5 ? 0.25 : 0.05;
+      o.smile = c < 0.5 ? 0 : 0.8; o.eyeL = c < 0.5 ? 0.3 : 1; o.eyeR = 0.3;
+      if (c > 0.5) { o.blush = 0.6; }
+    }],
+    ['Sour face', function (o, t) {
+      o.pucker = 1; o.open = 0.15; o.eyeL = o.eyeR = 0.18;
+      o.browL = -0.8; o.browR = -0.8; o.browY = 3;
+      o.tilt = Math.sin(t * 0.006) * 0.06; o.turn = Math.sin(t * 0.004) * 0.2;
+    }],
+    ['Sniffing', function (o, t) {
+      var s = Math.abs(Math.sin(t * 0.006));
+      o.eyeL = o.eyeR = 0.6 - s * 0.3; o.open = 0.06;
+      o.browY = -s * 2; o.tilt = -s * 0.06; o.bob = -s * 2;
+    }],
+    ['Coughing', function (o, t) {
+      var c = (t % 2200) / 2200;
+      var burst = c < 0.3 ? Math.abs(Math.sin(c / 0.3 * Math.PI * 3)) : 0;
+      o.open = burst * 0.7; o.wide = 0.3; o.teeth = 1;
+      o.eyeL = o.eyeR = 1 - burst * 0.8; o.tilt = burst * 0.18; o.bob = burst * 5;
+    }],
+    ['Hiccups', function (o, t) {
+      var c = (t % 1500) / 1500;
+      var h = c < 0.12 ? Math.sin(c / 0.12 * Math.PI) : 0;
+      o.bob = -h * 7; o.open = h * 0.5; o.eyeL = o.eyeR = 1 - h * 0.2 + h * 0.2;
+      o.browY = -h * 5; o.scale = 1 + h * 0.04;
+    }],
+    ['Holding breath', function (o, t) {
+      var c = (t % 5000) / 5000;
+      o.wide = 0.9; o.open = 0; o.blush = Math.min(1, c * 1.4);
+      o.eyeL = o.eyeR = 0.45; o.browY = 3; o.scale = 1 + c * 0.03;
+      o.sweat = c > 0.6 ? c : 0;
+    }],
+    ['Nodding', function (o, t) {
+      var n = Math.sin(t * 0.006);
+      o.bob = n * 6; o.tilt = n * 0.07; o.smile = 0.4;
+      o.eyeL = o.eyeR = 0.85 - Math.abs(n) * 0.2;
+    }],
+    ['Shaking head', function (o, t) {
+      o.turn = Math.sin(t * 0.006);
+      o.tilt = Math.sin(t * 0.006) * 0.06; o.smile = -0.3;
+      o.eyeL = o.eyeR = 0.8; o.browY = 1;
+    }],
+    ['Confused', function (o, t) {
+      o.tilt = 0.22 + Math.sin(t * 0.0016) * 0.06;
+      o.browR = -1.1; o.browL = 0.4;
+      o.open = 0.14; o.pucker = 1; o.eyeR = 0.7; o.eyeL = 1;
+      o.gazeX = Math.sin(t * 0.0013) * 0.6;
+    }],
+    ['Suspicious squint', function (o, t) {
+      o.eyeL = o.eyeR = 0.22; o.browY = 4; o.browL = -0.6; o.browR = -0.6;
+      o.gazeX = Math.sin(t * 0.0009) * 0.8; o.smile = -0.2;
+      o.turn = -0.2;
+    }],
+    ['Gasping', function (o, t) {
+      var c = (t % 2800) / 2800;
+      var gsp = c < 0.35 ? Math.sin(c / 0.35 * Math.PI) : 0.1;
+      o.open = 0.25 + gsp * 0.5; o.pucker = 1;
+      o.eyeL = o.eyeR = 0.8 + gsp * 0.2; o.browY = -gsp * 6;
+      o.scale = 1 + gsp * 0.03;
+    }],
+    ['Disgusted', function (o, t) {
+      o.eyeL = 0.3; o.eyeR = 0.5; o.browY = 3; o.browL = -0.9;
+      o.open = 0.2; o.smile = -0.9; o.wide = 0.3;
+      o.turn = -0.5 + Math.sin(t * 0.002) * 0.1; o.tilt = -0.08;
+    }],
+    ['Smug grin', function (o, t) {
+      o.smile = 0.9; o.turn = 0.25; o.browR = -0.8;
+      o.eyeL = 0.55; o.eyeR = 0.75; o.gazeX = -0.4;
+      o.tilt = -0.06 + Math.sin(t * 0.0012) * 0.03;
+    }],
+    ['Blushing', function (o, t) {
+      o.blush = 0.5 + Math.abs(Math.sin(t * 0.0022)) * 0.5;
+      o.smile = 0.5; o.gazeY = 0.6; o.gazeX = 0.5;
+      o.eyeL = o.eyeR = 0.6; o.tilt = -0.12;
+    }],
+    ['Nervous sweat', function (o, t) {
+      o.sweat = (t % 2000) / 2000;
+      o.gazeX = Math.sin(t * 0.006) * 0.9; o.eyeL = o.eyeR = 0.95;
+      o.smile = -0.4; o.open = 0.1; o.browY = -2; o.browL = 0.5; o.browR = 0.5;
+    }],
+    ['Crying with laughter', function (o, t) {
+      var l = Math.abs(Math.sin(t * 0.008));
+      o.open = 0.4 + l * 0.45; o.wide = 0.7; o.smile = 1; o.teeth = 1;
+      o.eyeL = o.eyeR = 0.15; o.tears = (t % 2200) / 2200;
+      o.bob = l * 5; o.tilt = Math.sin(t * 0.008) * 0.1;
+    }],
+    ['Grinding teeth', function (o, t) {
+      o.open = 0.16; o.wide = 0.8; o.teeth = 1;
+      o.turn = Math.sin(t * 0.01) * 0.25;
+      o.eyeL = o.eyeR = 0.35; o.browY = 4; o.browL = -1; o.browR = -1;
+    }],
+    ['Licking lips', function (o, t) {
+      var c = (t % 2600) / 2600;
+      var lick = c < 0.4 ? Math.sin(c / 0.4 * Math.PI) : 0;
+      o.open = 0.2 + lick * 0.3; o.tongue = lick > 0.2 ? 1 : 0;
+      o.turn = Math.sin(c / 0.4 * Math.PI * 2) * lick * 0.4;
+      o.eyeL = o.eyeR = 0.7; o.smile = 0.3;
+    }],
+    ['Biting lip', function (o, t) {
+      o.open = 0.14; o.teeth = 1; o.wide = -0.1;
+      o.eyeL = o.eyeR = 0.6; o.gazeX = Math.sin(t * 0.0011) * 0.6;
+      o.browY = 1; o.tilt = 0.06;
+    }],
+    ['Pouting', function (o, t) {
+      o.pucker = 1; o.open = 0.2; o.smile = -0.7;
+      o.browL = 0.8; o.browR = 0.8; o.gazeY = -0.5;
+      o.eyeL = o.eyeR = 0.8; o.tilt = Math.sin(t * 0.0014) * 0.08;
+    }],
+    ['Squinting into the sun', function (o, t) {
+      o.eyeL = 0.12; o.eyeR = 0.18; o.browY = 5;
+      o.browL = -1; o.browR = -1; o.open = 0.12; o.wide = 0.4;
+      o.tilt = -0.1; o.turn = Math.sin(t * 0.0008) * 0.15;
+    }],
+    ['Lowering sunglasses', function (o, t) {
+      var c = (t % 4600) / 4600;
+      o.shades = c < 0.5 ? 1 : 1 + Math.min(1, (c - 0.5) / 0.25);
+      o.eyeL = o.eyeR = c > 0.6 ? 1 : 0.9;
+      o.browY = c > 0.6 ? -4 : 0; o.smile = 0.3;
+    }],
+    ['Applying lipstick', function (o, t) {
+      var c = (t % 4000) / 4000;
+      o.lipstick = Math.min(1, c * 2.2);
+      o.pucker = c > 0.4 ? 1 : 0; o.open = 0.18;
+      o.eyeL = o.eyeR = 0.7; o.gazeY = 0.3;
+    }],
+    ['Brushing teeth', function (o, t) {
+      o.brush = t * 0.001;
+      o.open = 0.45; o.wide = 0.5; o.teeth = 1;
+      o.eyeL = o.eyeR = 0.7; o.turn = Math.sin(t * 0.009) * 0.2;
+    }],
+    ['Jump scare', function (o, t) {
+      var c = (t % 3600) / 3600;
+      if (c < 0.72) { o.eyeL = o.eyeR = 0.75; o.open = 0.05; o.scale = 1; }
+      else { var a = 1 - (c - 0.72) / 0.28;
+        o.eyeL = o.eyeR = 1; o.open = 0.85; o.wide = 0.5; o.teeth = 1;
+        o.browY = -7 * a; o.scale = 1 + a * 0.16; o.bob = -a * 5; }
+    }],
+    ['Thousand-yard stare', function (o, t) {
+      var b = Math.sin(t * 0.0007);
+      o.eyeL = o.eyeR = b > 0.95 ? 0.1 : 0.95;
+      o.gazeX = 0; o.gazeY = -0.1; o.open = 0.08;
+      o.browY = 1; o.smile = -0.1; o.bob = Math.sin(t * 0.0009) * 1;
+    }]
+  ];
+
+  for (var fi = 0; fi < FACES.length; fi++) {
+    (function (i) {
+      CHANNELS.push({
+        name: FACES[i][0],
+        draw: function (g, t) {
+          var o = baseFace(i);
+          o.hairStyle = (i * 3 + 1) % 8;          /* decouple hair from skin tone */
+          if (i % 7 === 2) o.beard = 1;
+          if (i % 9 === 4) o.tache = 1;
+          if (i % 11 === 5) o.glasses = 1;
+          FACES[i][1](o, t);
+          drawFace(g, o);
+        }
+      });
+    }(fi));
+  }
 
   var current = 0;
   var bag = [];
