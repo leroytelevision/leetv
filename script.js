@@ -3044,6 +3044,384 @@
   ];
 
 
+  /* ================================================================
+     ANIMAL FACES — one parametric head, close up.
+
+     Species differ far more than human faces do, so the renderer takes
+     a shape vocabulary (ear type, snout length, horn type, beak,
+     markings) rather than a single skull. Each animal is a line of
+     config plus an "act" that animates it.
+     ================================================================ */
+
+  function A(cfg) {                       /* defaults + overrides */
+    var o = {
+      fur:'#b08050', lit:'#d8a878', dark:'#7a5430', belly:'#f2e6d2',
+      nose:'#2a2018', eye:'#f0e0b0', pupil:'#120c08', ear:'#7a5430',
+      headW:40, headH:40, jaw:0.9,
+      earType:2, earSz:1, earX:0.86, earY:-0.62, earTilt:0.5,
+      muzzle:1, snout:0, noseType:1, noseSz:1, mouthType:0,
+      horn:0, mark:0, whisk:0, mane:0, beak:0, tusk:0, trunk:0, comb:0, wattle:0,
+      pupilType:0, eyeSz:1, eyeSpread:1, eyeY:0,
+      act:'blink',
+      eyeOpen:1, mouth:0, tongue:0, tilt:0, bob:0, gaze:0, earFlick:0
+    };
+    for (var k in cfg) if (cfg.hasOwnProperty(k)) o[k] = cfg[k];
+    return o;
+  }
+
+  function animAct(o, t) {
+    var b = Math.sin(t * 0.0017 + o.headW);
+    o.eyeOpen = b > 0.9 ? 0.08 : 1;
+    o.gaze = Math.sin(t * 0.0007) * 0.5;
+    switch (o.act) {
+      case 'pant':
+        o.mouth = 0.45 + Math.abs(Math.sin(t * 0.011)) * 0.3; o.tongue = 1; break;
+      case 'chew':
+        o.mouth = 0.08 + Math.abs(Math.sin(t * 0.007)) * 0.22;
+        o.tilt = Math.sin(t * 0.007) * 0.06; break;
+      case 'twitch':
+        o.earFlick = Math.sin(t * 0.004) > 0.7 ? Math.sin(t * 0.05) * 0.35 : 0;
+        o.mouth = 0.05; break;
+      case 'sniff':
+        o.bob = Math.abs(Math.sin(t * 0.009)) * 2.5;
+        o.mouth = 0.06 + Math.abs(Math.sin(t * 0.009)) * 0.08; break;
+      case 'roar':
+        var r = (t % 3400) / 3400;
+        o.mouth = r < 0.4 ? Math.sin(r / 0.4 * Math.PI) * 0.95 : 0.05;
+        o.tongue = o.mouth > 0.5 ? 1 : 0;
+        o.eyeOpen = o.mouth > 0.4 ? 0.35 : 1; break;
+      case 'hoot':
+        o.tilt = Math.sin(t * 0.0012) * 0.3;
+        o.eyeOpen = b > 0.93 ? 0.1 : 1;
+        o.mouth = 0.1 + Math.abs(Math.sin(t * 0.004)) * 0.15; break;
+      case 'peck':
+        var pk = (t % 1800) / 1800;
+        o.bob = pk < 0.3 ? Math.sin(pk / 0.3 * Math.PI) * 10 : 0;
+        o.mouth = o.bob > 4 ? 0.4 : 0.05; break;
+      case 'flick':
+        var fl = (t % 2600) / 2600;
+        o.tongue = fl < 0.16 ? 1 : 0;
+        o.mouth = fl < 0.16 ? 0.3 : 0.02; break;
+      case 'yawn':
+        var y = (t % 4600) / 4600;
+        o.mouth = y < 0.35 ? Math.sin(y / 0.35 * Math.PI) * 0.9 : 0.04;
+        o.eyeOpen = 1 - o.mouth * 0.9; break;
+      case 'bob':
+        o.bob = Math.sin(t * 0.004) * 4; o.tilt = Math.sin(t * 0.004) * 0.09;
+        o.mouth = 0.08; break;
+      case 'grin':
+        o.mouth = 0.22 + Math.abs(Math.sin(t * 0.003)) * 0.1;
+        o.eyeOpen = 0.75; break;
+      case 'blinkslow':
+        o.eyeOpen = Math.sin(t * 0.0009) > 0.75 ? 0.06 : 1;
+        o.mouth = 0.03; break;
+      default:
+        o.mouth = 0.06;
+    }
+  }
+
+  function drawAnimal(g, o) {
+    var cx = 80, cy = 58 + o.bob, hw = o.headW, hh = o.headH;
+
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(o.tilt);
+    g.translate(-cx, -cy);
+
+    /* neck / shoulders */
+    g.fillStyle = o.dark;
+    ell(g, cx, 128, hw * 1.5, 36);
+
+    /* horns and antlers sit behind the head */
+    if (o.horn) {
+      g.fillStyle = o.horn === 3 ? '#8a6a42' : '#d8cdb0';
+      for (var hs = 0; hs < 2; hs++) {
+        var sx = hs ? 1 : -1;
+        g.save();
+        g.translate(cx + sx * hw * 0.62, cy - hh * 0.72);
+        g.rotate(sx * 0.4);
+        if (o.horn === 1) {                       /* curved back */
+          g.beginPath(); g.moveTo(0, 0);
+          g.quadraticCurveTo(sx * 16, -22, sx * 4, -30);
+          g.quadraticCurveTo(sx * 2, -18, 0, 0); g.fill();
+        } else if (o.horn === 2) {                /* short and out */
+          g.beginPath(); g.moveTo(0, 0);
+          g.quadraticCurveTo(sx * 22, -8, sx * 26, -20);
+          g.quadraticCurveTo(sx * 14, -12, 0, 0); g.fill();
+        } else if (o.horn === 3) {                /* antlers */
+          seg(g, 0, 0, sx * 10, -26, 4, '#8a6a42');
+          seg(g, sx * 10, -26, sx * 22, -34, 3, '#8a6a42');
+          seg(g, sx * 6, -16, sx * 18, -22, 3, '#8a6a42');
+          seg(g, sx * 10, -26, sx * 12, -40, 3, '#8a6a42');
+        } else if (o.horn === 5) {                /* ossicones */
+          g.fillRect(-2.5, -16, 5, 16); ell(g, 0, -17, 4.5, 4);
+        }
+        g.restore();
+      }
+      if (o.horn === 4) {                         /* single nose horn */
+        g.fillStyle = '#cfc6ae';
+        poly(g, [[cx - 6, cy + hh * 0.5], [cx, cy + hh * 0.5 - 30], [cx + 6, cy + hh * 0.5]]);
+      }
+    }
+
+    /* ears behind the head */
+    if (o.earType) {
+      for (var e = 0; e < 2; e++) {
+        var s = e ? 1 : -1;
+        var ex = cx + s * hw * o.earX, ey = cy + hh * o.earY;
+        g.save();
+        g.translate(ex, ey);
+        g.rotate(s * (o.earTilt + o.earFlick));
+        var z = o.earSz;
+        g.fillStyle = o.fur;
+        if (o.earType === 1) {                    /* pointed */
+          poly(g, [[-11 * z, 10 * z], [0, -26 * z], [11 * z, 10 * z]]);
+          g.fillStyle = o.ear;
+          poly(g, [[-6 * z, 7 * z], [0, -16 * z], [6 * z, 7 * z]]);
+        } else if (o.earType === 2) {             /* round */
+          ell(g, 0, 0, 13 * z, 13 * z);
+          g.fillStyle = o.ear; ell(g, 0, 0, 7.5 * z, 7.5 * z);
+        } else if (o.earType === 3) {             /* floppy */
+          ell(g, 0, 14 * z, 10 * z, 22 * z, s * 0.25);
+          g.fillStyle = o.ear; ell(g, 0, 14 * z, 5 * z, 15 * z, s * 0.25);
+        } else if (o.earType === 4) {             /* long */
+          ell(g, 0, -18 * z, 7.5 * z, 26 * z, s * 0.16);
+          g.fillStyle = o.ear; ell(g, 0, -18 * z, 4 * z, 19 * z, s * 0.16);
+        } else if (o.earType === 5) {             /* tiny */
+          ell(g, 0, 0, 6 * z, 6 * z);
+        } else if (o.earType === 6) {             /* tufted */
+          poly(g, [[-10 * z, 10 * z], [0, -24 * z], [10 * z, 10 * z]]);
+          g.fillStyle = o.dark;
+          seg(g, 0, -18 * z, s * 6 * z, -34 * z, 2.4, o.dark);
+          seg(g, 3 * s * z, -16 * z, s * 11 * z, -30 * z, 2, o.dark);
+        }
+        g.restore();
+      }
+    }
+
+    /* mane behind the head */
+    if (o.mane) {
+      g.fillStyle = o.dark;
+      for (var m = 0; m < 16; m++) {
+        var ma = m * TAU / 16;
+        ell(g, cx + Math.cos(ma) * hw * 0.98, cy + Math.sin(ma) * hh * 0.98,
+            hw * 0.34, hh * 0.34);
+      }
+    }
+
+    /* head */
+    var grd = g.createRadialGradient(cx - hw * 0.35, cy - hh * 0.45, 4, cx, cy, hw * 1.5);
+    grd.addColorStop(0, o.lit); grd.addColorStop(0.5, o.fur); grd.addColorStop(1, o.dark);
+    g.fillStyle = grd;
+    ell(g, cx, cy, hw, hh);
+    if (o.jaw !== 1) ell(g, cx, cy + hh * 0.45, hw * o.jaw, hh * 0.55);
+
+    g.shadowColor = 'transparent'; g.shadowBlur = 0;
+
+    /* markings */
+    if (o.mark === 1) {                           /* stripes */
+      g.fillStyle = o.dark;
+      for (var st = 0; st < 5; st++) {
+        var sxp = cx + (st - 2) * hw * 0.34;
+        g.save(); g.translate(sxp, cy - hh * 0.5); g.rotate((st - 2) * 0.14);
+        g.fillRect(-2.5, -12, 5, 26); g.restore();
+      }
+    } else if (o.mark === 2) {                    /* spots */
+      g.fillStyle = 'rgba(40,26,14,0.75)';
+      for (var sp = 0; sp < 11; sp++) {
+        var a2 = sp * 2.399, r2 = (sp % 4) * hw * 0.22;
+        ell(g, cx + Math.cos(a2) * r2, cy + Math.sin(a2) * r2 * 0.9, 3.6, 3);
+      }
+    } else if (o.mark === 3) {                    /* bandit mask */
+      g.fillStyle = '#1e1a18';
+      ell(g, cx - hw * 0.42, cy - hh * 0.06, hw * 0.36, hh * 0.24, -0.18);
+      ell(g, cx + hw * 0.42, cy - hh * 0.06, hw * 0.36, hh * 0.24, 0.18);
+    } else if (o.mark === 4) {                    /* panda patches */
+      g.fillStyle = '#141414';
+      ell(g, cx - hw * 0.42, cy - hh * 0.1, hw * 0.3, hh * 0.3, -0.3);
+      ell(g, cx + hw * 0.42, cy - hh * 0.1, hw * 0.3, hh * 0.3, 0.3);
+    } else if (o.mark === 5) {                    /* dorsal stripe */
+      g.fillStyle = '#f4f4f0';
+      g.fillRect(cx - 5, cy - hh, 10, hh * 1.2);
+    }
+
+    /* muzzle */
+    if (o.muzzle) {
+      g.fillStyle = o.belly;
+      ell(g, cx, cy + hh * (0.42 + o.snout * 0.2), hw * 0.5 * o.muzzle,
+          hh * (0.3 + o.snout * 0.22) * o.muzzle);
+    }
+
+    /* eyes */
+    var edx = hw * 0.42 * o.eyeSpread, ey2 = cy - hh * 0.14 + o.eyeY;
+    for (var i = 0; i < 2; i++) {
+      var sg = i ? 1 : -1, x2 = cx + sg * edx;
+      var op = o.eyeOpen, rr = 8.5 * o.eyeSz;
+      g.fillStyle = o.eye;
+      ell(g, x2, ey2, rr, rr * op);
+      if (op > 0.15) {
+        g.fillStyle = o.pupil;
+        if (o.pupilType === 1) ell(g, x2 + o.gaze * 2, ey2, rr * 0.22, rr * 0.78 * op);
+        else if (o.pupilType === 2) ell(g, x2 + o.gaze * 2, ey2, rr * 0.8, rr * 0.24 * op);
+        else ell(g, x2 + o.gaze * 2, ey2, rr * 0.46, rr * 0.46 * op);
+        g.fillStyle = 'rgba(255,255,255,0.9)';
+        ell(g, x2 - rr * 0.3, ey2 - rr * 0.3, rr * 0.16, rr * 0.14);
+      }
+      /* Lid in fur colour, and only while actually closing — drawn in
+         the shading colour at full open it reads as a marking on the
+         forehead rather than an eyelid. */
+      if (op < 0.95) {
+        g.fillStyle = o.fur;
+        ell(g, x2, ey2 - rr - rr * op, rr * 1.3, rr);
+      }
+    }
+
+    /* nose or beak */
+    var ny = cy + hh * (0.36 + o.snout * 0.24);
+    if (o.beak) {
+      g.fillStyle = o.beak === 2 ? '#e8a83c' : '#d8a038';
+      if (o.beak === 1) {                         /* hooked */
+        poly(g, [[cx - 9, ny - 8], [cx + 9, ny - 8], [cx + 3, ny + 16], [cx - 3, ny + 16]]);
+        g.fillStyle = '#b8801c';
+        poly(g, [[cx - 4, ny + 8], [cx + 4, ny + 8], [cx, ny + 20]]);
+      } else if (o.beak === 2) {                  /* broad bill */
+        ell(g, cx, ny + 6, 17, 8);
+        g.fillStyle = '#c98c22'; ell(g, cx, ny + 10, 15, 4);
+      } else {                                    /* simple cone */
+        poly(g, [[cx - 8, ny - 4], [cx + 8, ny - 4], [cx, ny + 14]]);
+      }
+    } else if (o.noseType === 1) {
+      g.fillStyle = o.nose; ell(g, cx, ny, 8 * o.noseSz, 6 * o.noseSz);
+    } else if (o.noseType === 2) {                /* snout disc */
+      g.fillStyle = '#e29a9a'; ell(g, cx, ny, 13 * o.noseSz, 9 * o.noseSz);
+      g.fillStyle = '#a86868';
+      ell(g, cx - 5, ny, 2.6, 3.4); ell(g, cx + 5, ny, 2.6, 3.4);
+    } else if (o.noseType === 3) {                /* triangle */
+      g.fillStyle = o.nose;
+      poly(g, [[cx - 6, ny - 3], [cx + 6, ny - 3], [cx, ny + 5]]);
+    } else if (o.noseType === 4) {                /* wide nostrils */
+      g.fillStyle = o.dark;
+      ell(g, cx - 7, ny, 3.4, 4.4, -0.3); ell(g, cx + 7, ny, 3.4, 4.4, 0.3);
+    }
+
+    /* mouth */
+    var my = ny + 9 + o.snout * 4;
+    if (!o.beak) {
+      if (o.mouth > 0.08) {
+        g.fillStyle = '#40161c';
+        ell(g, cx, my + o.mouth * 5, 12 + o.mouth * 6, 3 + o.mouth * 12);
+        if (o.tongue) { g.fillStyle = '#e2717c';
+          ell(g, cx, my + o.mouth * 12, 7, 4 + o.mouth * 5); }
+        if (o.mouthType === 1) {                  /* fangs */
+          g.fillStyle = '#f4f0e4';
+          poly(g, [[cx - 8, my], [cx - 4, my], [cx - 6, my + 8]]);
+          poly(g, [[cx + 8, my], [cx + 4, my], [cx + 6, my + 8]]);
+        }
+      } else {
+        g.strokeStyle = 'rgba(50,30,20,0.7)'; g.lineWidth = 1.8;
+        g.beginPath(); g.moveTo(cx - 9, my); g.quadraticCurveTo(cx, my + 5, cx + 9, my); g.stroke();
+      }
+    }
+
+    if (o.comb) {                                 /* cockerel comb */
+      g.fillStyle = '#d8323c';
+      for (var cb = 0; cb < 4; cb++)
+        ell(g, cx - 12 + cb * 8, cy - hh - 4 - (cb % 2) * 4, 6, 8);
+    }
+    if (o.wattle) {
+      g.fillStyle = '#c8282f';
+      ell(g, cx - 7, ny + 20, 5, 10); ell(g, cx + 7, ny + 20, 5, 10);
+    }
+
+    if (o.tusk) {
+      g.fillStyle = '#efe8d4';
+      poly(g, [[cx - 11, my - 2], [cx - 6, my - 2], [cx - 7, my + 24]]);
+      poly(g, [[cx + 11, my - 2], [cx + 6, my - 2], [cx + 7, my + 24]]);
+    }
+
+    if (o.trunk) {
+      /* Drawn in the face colour the trunk simply disappeared into the
+         head. It needs its own tone and an outline to read. */
+      g.beginPath();
+      g.moveTo(cx - 11, ny - 6);
+      g.quadraticCurveTo(cx - 9, my + 34, cx + 4, my + 46);
+      g.quadraticCurveTo(cx + 12, my + 32, cx + 11, ny - 6);
+      g.closePath();
+      g.fillStyle = o.dark;
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 1.8; g.stroke();
+      g.fillStyle = o.lit;                        /* wrinkles catch light */
+      for (var w = 0; w < 6; w++) {
+        g.fillRect(cx - 9 + w * 0.7, ny + 2 + w * 8, 19 - w * 1.9, 1.6);
+      }
+    }
+
+    if (o.whisk) {
+      g.strokeStyle = 'rgba(250,246,236,0.8)'; g.lineWidth = 1.3;
+      for (var wi = 0; wi < 3; wi++) {
+        g.beginPath(); g.moveTo(cx - 10, my - 6 + wi * 3); g.lineTo(cx - 40, my - 12 + wi * 7); g.stroke();
+        g.beginPath(); g.moveTo(cx + 10, my - 6 + wi * 3); g.lineTo(cx + 40, my - 12 + wi * 7); g.stroke();
+      }
+    }
+
+    g.restore();
+  }
+
+  /* Species already used by other channels are deliberately absent:
+     cat, tiger, frog, horse, cow, octopus, crab, pigeon, snail, bats. */
+  var ANIMALS = [
+    ['Dog',       { fur:'#c58c4e', lit:'#e4b47c', dark:'#8a5a28', belly:'#f4e8d4', earType:3, earTilt:0.15, earX:0.8, earY:-0.3, snout:0.5, act:'pant' }],
+    ['Fox',       { fur:'#e07a2c', lit:'#f5a355', dark:'#a04f14', belly:'#f6efe2', earType:1, earSz:1.1, snout:0.55, whisk:1, act:'twitch' }],
+    ['Wolf',      { fur:'#8d9199', lit:'#b9bdc4', dark:'#5c6068', belly:'#e8ebef', earType:1, snout:0.6, mouthType:1, act:'roar' }],
+    ['Lion',      { fur:'#d9a24e', lit:'#f0c27c', dark:'#9a6a22', belly:'#f3e6cc', earType:2, earSz:0.8, mane:1, snout:0.3, whisk:1, mouthType:1, act:'roar' }],
+    ['Leopard',   { fur:'#e0b154', lit:'#f4cd82', dark:'#9e7420', belly:'#f6ecd6', earType:2, earSz:0.7, mark:2, snout:0.3, whisk:1, pupilType:1, act:'blinkslow' }],
+    ['Cheetah',   { fur:'#dcb060', lit:'#f2ca8c', dark:'#997420', belly:'#f6eddc', earType:2, earSz:0.7, mark:2, snout:0.35, whisk:1, act:'grin' }],
+    ['Lynx',      { fur:'#b7ad9c', lit:'#d8cfc0', dark:'#7d7466', belly:'#f2ede2', earType:6, snout:0.3, whisk:1, pupilType:1, act:'twitch' }],
+    ['Bear',      { fur:'#8a6038', lit:'#ab7f52', dark:'#573a1e', belly:'#c9a678', earType:2, earSz:0.9, headW:44, snout:0.45, act:'chew' }],
+    ['Panda',     { fur:'#f2f0ec', lit:'#ffffff', dark:'#c9c6c0', belly:'#ffffff', ear:'#141414', earType:2, earSz:0.9, mark:4, headW:44, snout:0.3, act:'chew' }],
+    ['Koala',     { fur:'#9aa0a6', lit:'#c2c7cc', dark:'#666c72', belly:'#e6e9ec', earType:2, earSz:1.5, ear:'#c8a0a8', headW:42, noseSz:1.6, act:'blinkslow' }],
+    ['Rabbit',    { fur:'#e8e2d8', lit:'#ffffff', dark:'#b5ae a2'.replace(' ',''), belly:'#ffffff', earType:4, earSz:1.1, headW:34, headH:36, whisk:1, noseType:3, act:'twitch' }],
+    ['Mouse',     { fur:'#a8a2a0', lit:'#cbc6c4', dark:'#6f6a68', belly:'#efe6e2', earType:2, earSz:1.6, ear:'#e0a8b0', headW:32, headH:34, snout:0.6, whisk:1, noseType:3, act:'sniff' }],
+    ['Hamster',   { fur:'#d8ac6c', lit:'#f0cd98', dark:'#9a7434', belly:'#f6ecd8', earType:2, earSz:0.9, headW:42, headH:38, whisk:1, noseType:3, act:'chew' }],
+    ['Squirrel',  { fur:'#a8724a', lit:'#c9946a', dark:'#6f4626', belly:'#f0e2cc', earType:6, earSz:0.7, headW:34, snout:0.5, whisk:1, act:'chew' }],
+    ['Raccoon',   { fur:'#9b9a97', lit:'#c0bfbc', dark:'#5f5e5c', belly:'#e8e6e2', earType:2, earSz:0.9, mark:3, snout:0.55, whisk:1, act:'sniff' }],
+    ['Skunk',     { fur:'#2a2a2e', lit:'#4a4a50', dark:'#141418', belly:'#f2f2ee', earType:2, earSz:0.7, mark:5, snout:0.5, whisk:1, act:'sniff' }],
+    ['Hedgehog',  { fur:'#8a7a62', lit:'#a99a80', dark:'#584c3a', belly:'#e0cfae', earType:5, mark:1, headW:36, snout:0.7, whisk:1, noseType:3, act:'sniff' }],
+    ['Otter',     { fur:'#7c5a3c', lit:'#9c7a58', dark:'#4e3722', belly:'#d8c2a0', earType:5, headW:38, snout:0.35, whisk:1, act:'grin' }],
+    ['Badger',    { fur:'#6e6a66', lit:'#918d88', dark:'#3e3b38', belly:'#f0eee8', earType:5, mark:5, snout:0.6, act:'sniff' }],
+    ['Seal',      { fur:'#8e939a', lit:'#b4b9c0', dark:'#5c6067', belly:'#dfe3e8', earType:0, headW:38, headH:36, snout:0.3, whisk:1, pupilType:0, eyeSz:1.2, act:'blinkslow' }],
+    ['Walrus',    { fur:'#a07a68', lit:'#c19a86', dark:'#6b4c3c', belly:'#d8bca8', earType:0, headW:42, snout:0.4, whisk:1, tusk:1, act:'blinkslow' }],
+    ['Elephant',  { fur:'#aeaaa6', lit:'#cecac6', dark:'#5e5a56', belly:'#b0aca8', earType:3, earSz:2.1, earX:1.0, earY:-0.1, headW:38, trunk:1, noseType:0, eyeSz:0.7, act:'bob' }],
+    ['Rhino',     { fur:'#8e8e8c', lit:'#adadaa', dark:'#5e5e5c', belly:'#a0a09c', earType:5, horn:4, headW:38, snout:0.7, eyeSz:0.7, noseType:4, act:'sniff' }],
+    ['Hippo',     { fur:'#9a7f8e', lit:'#bb9fae', dark:'#65505d', belly:'#d0b6c2', earType:5, headW:44, headH:38, snout:0.5, muzzle:1.5, noseType:4, act:'yawn' }],
+    ['Giraffe',   { fur:'#e2b45c', lit:'#f4d189', dark:'#a2792a', belly:'#f4e6c8', earType:1, earSz:0.9, horn:5, mark:2, headW:30, headH:40, snout:0.8, act:'chew' }],
+    ['Zebra',     { fur:'#f0efe9', lit:'#ffffff', dark:'#b8b6b0', belly:'#ffffff', earType:1, earSz:0.9, mark:1, headW:30, headH:42, snout:0.8, act:'twitch' }],
+    ['Donkey',    { fur:'#9c948c', lit:'#bdb5ac', dark:'#655e58', belly:'#e2dbd2', earType:4, earSz:1.2, headW:30, headH:42, snout:0.8, act:'chew' }],
+    ['Bull',      { fur:'#7a5230', lit:'#9c7048', dark:'#4c3018', belly:'#c8a882', earType:5, horn:2, headW:40, snout:0.6, noseType:4, act:'sniff' }],
+    ['Goat',      { fur:'#e6e0d2', lit:'#faf6ea', dark:'#b0a894', belly:'#f6f2e6', earType:3, earSz:0.9, horn:1, headW:30, headH:40, snout:0.7, act:'chew' }],
+    ['Sheep',     { fur:'#efeade', lit:'#ffffff', dark:'#bab3a2', belly:'#f8f4ea', earType:3, earSz:1.1, earTilt:0.9, headW:34, snout:0.5, act:'chew' }],
+    ['Pig',       { fur:'#eda8b0', lit:'#ffc8ce', dark:'#b8767e', belly:'#f8d2d8', earType:1, earSz:1.1, earTilt:0.9, headW:40, snout:0.4, noseType:2, act:'chew' }],
+    ['Deer',      { fur:'#b98a56', lit:'#d8aa78', dark:'#7c5628', belly:'#f0e2cc', earType:4, earSz:0.9, earTilt:0.9, horn:3, headW:30, headH:40, snout:0.7, act:'twitch' }],
+    ['Moose',     { fur:'#6f5238', lit:'#8d6c4c', dark:'#452f1c', belly:'#a88a66', earType:4, earSz:0.8, earTilt:1.0, horn:3, headW:32, headH:44, snout:0.9, act:'chew' }],
+    ['Camel',     { fur:'#d4ab72', lit:'#eec99a', dark:'#93703c', belly:'#eedcc0', earType:5, headW:30, headH:40, snout:0.9, act:'chew' }],
+    ['Llama',     { fur:'#e4d6bc', lit:'#f6ecd8', dark:'#a8977a', belly:'#f6efe2', earType:4, earSz:0.9, headW:30, headH:40, snout:0.7, act:'chew' }],
+    ['Monkey',    { fur:'#8a6a4a', lit:'#a98a68', dark:'#584028', belly:'#e0c2a0', earType:2, earSz:1.4, headW:36, snout:0.4, muzzle:1.4, act:'grin' }],
+    ['Gorilla',   { fur:'#3a3a3e', lit:'#5c5c62', dark:'#1e1e22', belly:'#6a5a52', earType:5, headW:44, headH:42, snout:0.4, muzzle:1.4, act:'roar' }],
+    ['Lemur',     { fur:'#a8a8a4', lit:'#c9c9c4', dark:'#6a6a66', belly:'#f0efe8', earType:2, earSz:1.2, mark:3, headW:34, snout:0.5, eye:'#f6d24a', eyeSz:1.2, act:'blinkslow' }],
+    ['Owl',       { fur:'#a1876a', lit:'#c2a789', dark:'#66523c', belly:'#e6d6bc', earType:6, earSz:0.6, beak:3, headW:44, headH:40, eyeSz:1.45, eyeSpread:1.08, muzzle:0, act:'hoot' }],
+    ['Eagle',     { fur:'#f2efe6', lit:'#ffffff', dark:'#8a5a30', belly:'#f6f4ee', earType:0, beak:1, headW:38, eye:'#f0c23a', pupilType:0, muzzle:0, act:'blink' }],
+    ['Parrot',    { fur:'#3fae54', lit:'#6ad07c', dark:'#25732f', belly:'#e8d24a', earType:0, beak:1, headW:34, eye:'#f6f0e0', muzzle:0, act:'peck' }],
+    ['Penguin',   { fur:'#232830', lit:'#454c58', dark:'#12161c', belly:'#f4f2ec', earType:0, beak:3, headW:36, muzzle:1.5, eyeSz:0.8, act:'bob' }],
+    ['Duck',      { fur:'#6f6a5a', lit:'#918b78', dark:'#464234', belly:'#d8d0b8', earType:0, beak:2, headW:34, muzzle:0, act:'peck' }],
+    ['Rooster',   { fur:'#b8482c', lit:'#d86b48', dark:'#7c2c18', belly:'#e8c07c', earType:0, beak:3, comb:1, wattle:1, headW:32, muzzle:0, act:'peck' }],
+    ['Toucan',    { fur:'#1e1e22', lit:'#3e3e46', dark:'#0e0e12', belly:'#f2f0e6', earType:0, beak:1, headW:34, eye:'#f0f0e0', muzzle:0, act:'peck' }],
+    ['Chameleon', { fur:'#6aa83c', lit:'#8fca5e', dark:'#3f6f20', belly:'#c6e08a', earType:0, headW:38, headH:34, snout:0.4, eyeSz:1.5, eyeSpread:1.25, pupilType:0, act:'flick' }],
+    ['Snake',     { fur:'#4f8a3c', lit:'#74ac5c', dark:'#2f5a22', belly:'#d2e0a0', earType:0, headW:36, headH:28, snout:0.5, pupilType:1, eyeSz:0.9, act:'flick' }],
+    ['Crocodile', { fur:'#5d7a4a', lit:'#7c9c66', dark:'#38502a', belly:'#cbd2a0', earType:0, headW:38, headH:30, snout:1.1, pupilType:1, mouthType:1, act:'yawn' }],
+    ['Turtle',    { fur:'#7a8f52', lit:'#9cb072', dark:'#4e5e32', belly:'#d8d8a8', earType:0, headW:34, headH:32, snout:0.5, beak:3, muzzle:0, act:'blinkslow' }],
+    ['Shark',     { fur:'#7f8a94', lit:'#a3aeb8', dark:'#4e565e', belly:'#eef1f4', earType:0, headW:42, headH:34, snout:0.7, mouthType:1, eyeSz:0.7, pupilType:0, act:'blinkslow' }]
+  ];
+
   /* ================================================================ */
 
   var CHANNELS = [
@@ -3441,6 +3819,19 @@
     (function (i) {
       CHANNELS.push({ name: G3[i][0], draw: G3[i][1] });
     }(gi));
+  }
+
+  for (var ani = 0; ani < ANIMALS.length; ani++) {
+    (function (i) {
+      CHANNELS.push({
+        name: ANIMALS[i][0],
+        draw: function (g, t) {
+          var o = A(ANIMALS[i][1]);
+          animAct(o, t);
+          drawAnimal(g, o);
+        }
+      });
+    }(ani));
   }
 
   var current = 0;
