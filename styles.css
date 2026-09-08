@@ -1,22 +1,51 @@
 /* ---------------------------------------------------------------
-   leetv.tv — retro TV set
-   Layout unit: --u == 1% of the stage width. Every dimension below
-   is a multiple of --u, so the whole set scales as one piece.
-   Stage aspect ratio is 100 : 80 (see --aw / --ah).
+   leetv.tv
+
+   The set is a transparent PNG photograph. The animated static is a
+   canvas positioned behind it, revealed only through the screen
+   cut-out — the photograph itself does the masking.
+
+   Screen rectangle measured from the PNG's alpha channel:
+     fully transparent   x 946  y 570  723 x 540
+     any transparency    x 886  y 510  842 x 658   (~60px feathered edge)
+   The canvas covers the FULL transparency extent plus a 6px margin,
+   so nothing dark shows through the feather. Both boxes share the
+   same centre, so the ident still lands centred in the opening.
+
+   Layout unit: --u == 1% of the stage width, as before. The stage
+   carries the photograph's own 2944:1648 aspect, and is sized with
+   max() so it always COVERS the viewport - it fills edge to edge at
+   any window shape, overflowing on whichever axis is longer. The
+   anchor point below decides what stays in frame when it crops.
    --------------------------------------------------------------- */
 
 :root {
   --aw: 100;
-  --ah: 80;
+  --ah: 55.9783;                 /* 1648 / 2944 * 100 */
+  /* max() => cover. 1.7865 rather than the exact 1.78641 so rounding
+     can never leave a sub-pixel gap along an edge. */
+  --u: max(1vw, 1.7865vh);
 
-  --pink-lit:  #ff7cc4;
-  --pink:      #ff3ea5;
-  --pink-mid:  #ec2189;
-  --pink-deep: #b9106a;
-  --pink-dark: #7d0a48;
+  --sw: calc(var(--u) * var(--aw));
+  --sh: calc(var(--u) * var(--ah));
+  --ox: calc(var(--sw) - 100vw);   /* horizontal overflow, never < 0 */
+  --oy: calc(var(--sh) - 100vh);   /* vertical overflow,   never < 0 */
 
-  --room-1: #1a1016;
-  --room-2: #0a0609;
+  /* Point of the photograph pulled toward the centre of the window, as
+     a fraction. Horizontal only bites in tall windows, vertical only in
+     wide ones. 0.492 is the cabinet's centre. Vertically, 0.52 keeps
+     the pedestal's foot in frame in wide windows - the set reads as
+     ungrounded if its base is cut, whereas losing a little antenna
+     just reads as framing (the rods are already cropped in the
+     source photograph). */
+  --anchor-x: 0.492;
+  --anchor-y: 0.52;
+
+  /* screen cut-out, as a fraction of the photograph */
+  --screen-left:   29.8913%;   /* 880 / 2944 */
+  --screen-top:    30.5825%;   /* 504 / 1648 */
+  --screen-width:  29.0082%;   /* 854 / 2944 */
+  --screen-height: 40.6553%;   /*  670 / 1648 */
 }
 
 * { box-sizing: border-box; }
@@ -26,12 +55,10 @@ html, body { height: 100%; }
 body {
   margin: 0;
   overflow: hidden;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(120% 90% at 50% 42%, var(--room-1) 0%, var(--room-2) 78%);
-  font-family: "Helvetica Neue", Arial, sans-serif;
+  background: #1a0d12;
 }
+
+html { overflow: hidden; }
 
 .sr-only {
   position: absolute;
@@ -44,73 +71,61 @@ body {
   border: 0;
 }
 
-/* --- stage: fixed aspect box that always fits the viewport -------- */
+/* --- stage -------------------------------------------------------- */
 
 .stage {
-  /* 0.94 => the set occupies at most 94% of the limiting axis */
-  --u: min(0.94vw, 1.175vh);
-  width: calc(var(--u) * var(--aw));
-  height: calc(var(--u) * var(--ah));
-  position: relative;
+  position: fixed;
+  /* Pull the anchor toward the centre, but clamp so the stage can never
+     be dragged away from an edge: the offset is limited to however much
+     the stage actually overflows. Without the clamp a barely-oversized
+     stage leaves a sliver of background showing. */
+  left: clamp(calc(-1 * var(--ox)), calc(50vw - var(--anchor-x) * var(--sw)), 0px);
+  top:  clamp(calc(-1 * var(--oy)), calc(50vh - var(--anchor-y) * var(--sh)), 0px);
+  z-index: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+          user-select: none;
+  width: var(--sw);
+  height: var(--sh);
 }
 
-@supports (height: 1svh) {
-  .stage { --u: min(0.94vw, 1.175svh); }
+.stage:focus-visible {
+  outline: 3px solid #ff3399;
+  outline-offset: 4px;
 }
 
-.tv { position: absolute; inset: 0; }
-
-/* --- cabinet ------------------------------------------------------ */
-
-.cabinet {
+.set {
   position: absolute;
-  top: 0; left: 0;
+  inset: 0;
   z-index: 2;
   width: 100%;
-  height: calc(var(--u) * 66);
-  padding: calc(var(--u) * 6);
-  display: flex;
-  align-items: center;
-  gap: calc(var(--u) * 3);
-  border-radius: calc(var(--u) * 8) calc(var(--u) * 8) calc(var(--u) * 5) calc(var(--u) * 5);
-  background:
-    linear-gradient(158deg,
-      var(--pink-lit) 0%,
-      var(--pink) 26%,
-      var(--pink-mid) 62%,
-      var(--pink-deep) 88%,
-      var(--pink-dark) 100%);
-  box-shadow:
-    inset 0 calc(var(--u) * 0.7) 0 rgba(255, 255, 255, 0.42),
-    inset calc(var(--u) * 0.7) 0 0 rgba(255, 255, 255, 0.16),
-    inset 0 calc(var(--u) * -1.4) calc(var(--u) * 2) rgba(90, 5, 50, 0.55),
-    0 calc(var(--u) * 2) calc(var(--u) * 3) rgba(0, 0, 0, 0.35),
-    0 calc(var(--u) * 6) calc(var(--u) * 9) rgba(0, 0, 0, 0.45);
+  height: 100%;
+  display: block;
+  /* the photograph's own aspect matches the stage, so this never crops */
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A very tall window crops hard horizontally. Re-anchor on the screen
+   cut-out (centre x 1307 / 2944) so the picture survives even when the
+   cabinet's edges do not. */
+@media (max-aspect-ratio: 4 / 5) {
+  :root { --anchor-x: 0.444; }
 }
 
 /* --- screen ------------------------------------------------------- */
 
-.screen-frame {
-  flex: 1 1 auto;
-  height: 100%;
-  padding: calc(var(--u) * 1.7);
-  border-radius: calc(var(--u) * 6) / calc(var(--u) * 7);
-  background: linear-gradient(160deg, #34343c 0%, #1b1b21 46%, #0d0d11 100%);
-  box-shadow:
-    inset 0 calc(var(--u) * 0.35) 0 rgba(255, 255, 255, 0.16),
-    inset 0 calc(var(--u) * -0.35) 0 rgba(0, 0, 0, 0.7),
-    0 0 0 calc(var(--u) * 0.4) rgba(120, 8, 66, 0.55),
-    0 calc(var(--u) * 0.8) calc(var(--u) * 1.6) rgba(0, 0, 0, 0.5);
-}
-
 .screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  z-index: 1;
+  left: var(--screen-left);
+  top: var(--screen-top);
+  width: var(--screen-width);
+  height: var(--screen-height);
   overflow: hidden;
-  border-radius: calc(var(--u) * 4.6) / calc(var(--u) * 5.6);
   background: #000;
-  box-shadow: inset 0 0 calc(var(--u) * 2.4) rgba(0, 0, 0, 0.95);
 }
 
 #tube {
@@ -121,6 +136,9 @@ body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+
+/* Everything below is sized in percentages of the screen, so the CRT
+   treatment holds its proportions independently of the stage unit. */
 
 .roll {
   position: absolute;
@@ -148,121 +166,28 @@ body {
   mix-blend-mode: multiply;
   background: repeating-linear-gradient(
     to bottom,
-    rgba(0, 0, 0, 0.34) 0,
-    rgba(0, 0, 0, 0.34) calc(var(--u) * 0.16),
-    rgba(0, 0, 0, 0) calc(var(--u) * 0.16),
-    rgba(0, 0, 0, 0) calc(var(--u) * 0.4));
+    rgba(0, 0, 0, 0.30) 0%,
+    rgba(0, 0, 0, 0.30) 0.45%,
+    rgba(0, 0, 0, 0) 0.45%,
+    rgba(0, 0, 0, 0) 1.1%);
 }
 
+/* Soft bulge and corner falloff. Kept restrained: the photograph
+   carries its own glass and lighting, so a strong CSS reflection
+   would fight it. */
 .glass {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background:
-    linear-gradient(133deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0) 38%),
-    radial-gradient(118% 100% at 50% 48%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.62) 100%);
-}
-
-/* --- control panel ------------------------------------------------ */
-
-.panel {
-  flex: 0 0 calc(var(--u) * 17);
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(var(--u) * 2.2);
-}
-
-.knob {
-  position: relative;
-  flex: 0 0 auto;
-  width: calc(var(--u) * 10.5);
-  height: calc(var(--u) * 10.5);
-  border-radius: 50%;
-  background:
-    radial-gradient(60% 60% at 36% 30%, #f3ecec 0%, #cdbfbf 26%, #8d7c7c 62%, #4a3d3d 100%);
-  box-shadow:
-    inset 0 calc(var(--u) * -0.5) calc(var(--u) * 0.7) rgba(0, 0, 0, 0.55),
-    inset 0 calc(var(--u) * 0.4) calc(var(--u) * 0.5) rgba(255, 255, 255, 0.75),
-    0 0 0 calc(var(--u) * 0.55) rgba(70, 4, 40, 0.5),
-    0 calc(var(--u) * 0.7) calc(var(--u) * 1.1) rgba(0, 0, 0, 0.5);
-}
-
-.knob__pointer {
-  position: absolute;
-  top: 12%;
-  left: 50%;
-  width: calc(var(--u) * 0.7);
-  height: 32%;
-  margin-left: calc(var(--u) * -0.35);
-  border-radius: calc(var(--u) * 0.35);
-  background: #2b2222;
-  box-shadow: 0 calc(var(--u) * 0.1) 0 rgba(255, 255, 255, 0.35);
-}
-
-.knob--tuner  { transform: rotate(-38deg); }
-.knob--volume { transform: rotate(64deg); }
-
-.grille {
-  width: 100%;
-  flex: 1 1 auto;
-  margin-top: calc(var(--u) * 0.4);
-  border-radius: calc(var(--u) * 1.6);
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(28, 6, 18, 0.92) 0,
-      rgba(28, 6, 18, 0.92) calc(var(--u) * 0.62),
-      rgba(255, 150, 205, 0.30) calc(var(--u) * 0.62),
-      rgba(255, 150, 205, 0.30) calc(var(--u) * 1.24));
-  box-shadow:
-    inset 0 0 0 calc(var(--u) * 0.35) rgba(90, 6, 52, 0.55),
-    inset 0 calc(var(--u) * 0.5) calc(var(--u) * 0.8) rgba(0, 0, 0, 0.6),
-    0 calc(var(--u) * 0.25) 0 rgba(255, 255, 255, 0.22);
-}
-
-/* --- legs --------------------------------------------------------- */
-
-.legs {
-  position: absolute;
-  z-index: 1;
-  top: calc(var(--u) * 61);
-  left: 0;
-  width: 100%;
-  height: calc(var(--u) * 17);
-}
-
-.leg {
-  position: absolute;
-  top: 0;
-  width: calc(var(--u) * 3.2);
-  height: calc(var(--u) * 15);
-  transform-origin: 50% 0;
-  border-radius: 0 0 calc(var(--u) * 1.4) calc(var(--u) * 1.4);
-  background: linear-gradient(90deg, #2a1611 0%, #6d3d28 38%, #8a5236 58%, #331b13 100%);
-  box-shadow: 0 calc(var(--u) * 0.6) calc(var(--u) * 1) rgba(0, 0, 0, 0.5);
-}
-
-.leg--l { left:  13%; transform: rotate(-14deg); }
-.leg--r { right: 13%; transform: rotate(14deg); }
-
-.leg--back {
-  height: calc(var(--u) * 12);
-  filter: brightness(0.45);
-}
-
-.leg--bl { left:  25%; transform: rotate(-9deg); }
-.leg--br { right: 25%; transform: rotate(9deg); }
-
-.floor-shadow {
-  position: absolute;
-  z-index: 0;
-  left: 8%;
-  right: 8%;
-  top: calc(var(--u) * 73);
-  height: calc(var(--u) * 7);
-  border-radius: 50%;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 72%);
+    radial-gradient(74% 64% at 44% 34%,
+      rgba(255, 255, 255, 0.10) 0%,
+      rgba(255, 255, 255, 0.02) 48%,
+      rgba(255, 255, 255, 0) 74%),
+    radial-gradient(118% 112% at 50% 48%,
+      rgba(0, 0, 0, 0) 46%,
+      rgba(0, 0, 0, 0.30) 78%,
+      rgba(0, 0, 0, 0.72) 100%);
 }
 
 /* --- reduced motion ----------------------------------------------- */
