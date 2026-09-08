@@ -3422,6 +3422,290 @@
     ['Shark',     { fur:'#7f8a94', lit:'#a3aeb8', dark:'#4e565e', belly:'#eef1f4', earType:0, headW:42, headH:34, snout:0.7, mouthType:1, eyeSz:0.7, pupilType:0, act:'blinkslow' }]
   ];
 
+  /* ================================================================
+     FISH — one parametric fish crossing the tube.
+
+     A shape vocabulary (body form, tail, fins, pattern) plus per-
+     species extras: bills, sails, lures, barbels, spines. Half the
+     species swim left to right, half right to left; direction is a
+     mirror on the whole scene so the art is only authored facing one
+     way.
+     ================================================================ */
+
+  function F(cfg) {
+    var o = {
+      c1:'#f0783c', c2:'#ffd9a0', c3:'#ffffff', c4:'#f0a03c', eye:'#ffffff', pupil:'#101018',
+      body:0, tail:0, pat:0, len:34, dep:20,
+      dorsal:1, pect:1, pelvic:1,
+      bill:0, sail:0, lure:0, barbel:0, spine:0, teeth:0, glow:0, ray:0, horse:0,
+      speed:1, wig:1, dir:1
+    };
+    for (var k in cfg) if (cfg.hasOwnProperty(k)) o[k] = cfg[k];
+    return o;
+  }
+
+  function fishShape(g, o, t, ph, sc) {
+    var L = o.len, D = o.dep;
+    var sw = Math.sin(t * 0.006 * o.wig + ph);         /* tail swish */
+    var fl = Math.sin(t * 0.011 + ph);                 /* fin flutter */
+
+    g.save();
+    g.scale(sc, sc);
+
+    /* tail, behind the body */
+    g.save();
+    g.translate(-L * 0.92, 0);
+    g.rotate(sw * 0.36);
+    g.fillStyle = o.c4;
+    if (o.tail === 1) {                                /* forked */
+      poly(g, [[0, 0], [-L * 0.6, -D * 1.1], [-L * 0.34, 0], [-L * 0.6, D * 1.1]]);
+    } else if (o.tail === 2) {                         /* crescent */
+      poly(g, [[0, 0], [-L * 0.55, -D * 1.15], [-L * 0.36, 0], [-L * 0.55, D * 1.15]]);
+    } else if (o.tail === 3) {                         /* long flowing */
+      poly(g, [[0, -D * 0.2], [-L * 0.9, -D * 1.1], [-L * 1.0, D * 0.2], [-L * 0.4, D * 0.5], [0, D * 0.2]]);
+    } else if (o.tail === 4) {                         /* round */
+      ell(g, -L * 0.3, 0, L * 0.38, D * 1.0);
+    } else if (o.tail === 5) {                         /* whip */
+      g.fillRect(-L * 1.1, -1.2, L * 1.1, 2.4);
+    } else {                                           /* fan */
+      poly(g, [[0, 0], [-L * 0.55, -D * 1.15], [-L * 0.55, D * 1.15]]);
+    }
+    g.restore();
+
+    /* dorsal sail or fin */
+    g.fillStyle = o.c4;
+    if (o.sail) {
+      g.beginPath();
+      g.moveTo(-L * 0.7, -D * 0.5);
+      g.quadraticCurveTo(0, -D * (2.4 + fl * 0.2), L * 0.55, -D * 0.5);
+      g.fill();
+    } else if (o.dorsal) {
+      poly(g, [[-L * 0.34, -D * 0.75], [0, -D * (1.45 + fl * 0.12)], [L * 0.3, -D * 0.7]]);
+    }
+    if (o.pelvic) poly(g, [[-L * 0.2, D * 0.7], [0, D * (1.25 - fl * 0.12)], [L * 0.22, D * 0.66]]);
+
+    /* body */
+    var grd = g.createLinearGradient(0, -D, 0, D);
+    grd.addColorStop(0, o.c1);
+    grd.addColorStop(0.55, o.c1);
+    grd.addColorStop(1, o.c2);
+    g.fillStyle = grd;
+    g.beginPath();
+    if (o.body === 1) g.ellipse(0, 0, L * 0.78, D * 1.5, 0, 0, TAU);   /* disc */
+    else if (o.body === 2) g.ellipse(0, 0, L, D * 0.44, 0, 0, TAU);         /* elongated */
+    else if (o.body === 3) {                                       /* torpedo */
+      g.beginPath();
+      g.moveTo(L, 0);
+      g.quadraticCurveTo(L * 0.2, -D, -L * 0.9, -D * 0.3);
+      g.quadraticCurveTo(-L * 0.9, D * 0.3, L * 0.2, D);
+      g.closePath(); g.fill();
+    } else if (o.body === 4) {                                     /* box */
+      g.fillRect(-L * 0.7, -D * 0.9, L * 1.5, D * 1.8);
+    } else if (o.body === 5) ell(g, 0, 0, L * 0.85, D * 1.25);      /* puffer */
+    else if (o.body === 6) {                                       /* ray */
+      poly(g, [[L * 0.9, 0], [0, -D * 1.9], [-L * 0.8, 0], [0, D * 1.9]]);
+    } else ell(g, 0, 0, L, D);                                     /* standard */
+
+    g.strokeStyle = 'rgba(10,20,30,0.65)';
+    g.lineWidth = 1.6;
+    g.stroke();
+
+    /* pattern */
+    g.save();
+    g.beginPath();
+    if (o.body === 1) g.ellipse(0, 0, L * 0.78, D * 1.5, 0, 0, TAU);
+    else if (o.body === 6) { g.moveTo(L*0.9,0); g.lineTo(0,-D*1.9); g.lineTo(-L*0.8,0); g.lineTo(0,D*1.9); }
+    else g.ellipse(0, 0, L, D, 0, 0, TAU);
+    g.clip();
+    g.fillStyle = o.c3;
+    var i;
+    if (o.pat === 1) {                                             /* vertical bars */
+      for (i = -2; i <= 2; i++) g.fillRect(i * L * 0.36 - 2.5, -D * 2, 5, D * 4);
+    } else if (o.pat === 2) {                                      /* lateral stripes */
+      for (i = -1; i <= 1; i++) g.fillRect(-L * 1.2, i * D * 0.5 - 2, L * 2.4, 4);
+    } else if (o.pat === 3) {                                      /* spots */
+      for (i = 0; i < 14; i++) {
+        var a = i * 2.399;
+        ell(g, Math.cos(a) * L * 0.62, Math.sin(a) * D * 0.7, 2.6, 2.6);
+      }
+    } else if (o.pat === 4) {                                      /* wide bands */
+      g.fillRect(-L * 0.62, -D * 2, 7, D * 4);
+      g.fillRect(L * 0.1, -D * 2, 8, D * 4);
+    } else if (o.pat === 5) {                                      /* split tone */
+      g.fillRect(-L * 1.2, -D * 2, L * 1.1, D * 4);
+    } else if (o.pat === 6) {                                      /* chevrons */
+      for (i = -2; i <= 2; i++) {
+        poly(g, [[i * L * 0.34, -D], [i * L * 0.34 + 6, -D], [i * L * 0.34 - 3, D], [i * L * 0.34 - 9, D]]);
+      }
+    } else if (o.pat === 7) {                                      /* scales */
+      for (i = 0; i < 22; i++) {
+        var sx = -L + (i % 6) * L * 0.36, sy = -D * 0.7 + Math.floor(i / 6) * D * 0.5;
+        ring(g, sx, sy, 3.4, 1, o.c3);
+      }
+    }
+    g.restore();
+
+    /* pectoral fin */
+    if (o.pect) {
+      g.fillStyle = o.c4;
+      g.save(); g.translate(L * 0.12, D * 0.24); g.rotate(0.5 + fl * 0.35);
+      ell(g, 0, D * 0.4, L * 0.16, D * 0.46);
+      g.restore();
+    }
+
+    /* long venomous rays */
+    if (o.spine) {
+      g.strokeStyle = o.c4; g.lineWidth = 2;
+      for (i = 0; i < 7; i++) {
+        var sa = -1.9 + i * 0.42;
+        g.beginPath();
+        g.moveTo(Math.cos(sa) * L * 0.4, Math.sin(sa) * D * 0.6);
+        g.lineTo(Math.cos(sa) * L * 1.5, Math.sin(sa) * D * 2.6 + fl * 2);
+        g.stroke();
+      }
+    }
+
+    /* head furniture */
+    if (o.bill) {
+      g.fillStyle = o.c1;
+      poly(g, [[L * 0.9, -2.5], [L * (1.75 + o.bill * 0.5), 0], [L * 0.9, 2.5]]);
+    }
+    if (o.barbel) {
+      g.strokeStyle = o.c2; g.lineWidth = 1.4;
+      for (i = 0; i < 2; i++) {
+        g.beginPath();
+        g.moveTo(L * 0.8, D * 0.3);
+        g.quadraticCurveTo(L * 1.2, D * (0.7 + i * 0.4) + fl, L * 0.6, D * (1.3 + i * 0.5));
+        g.stroke();
+      }
+    }
+    if (o.lure) {
+      g.strokeStyle = o.c2; g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(L * 0.3, -D * 0.8);
+      g.quadraticCurveTo(L * 1.3, -D * 2.4, L * 1.5, -D * 1.4 + fl * 2);
+      g.stroke();
+      g.fillStyle = 'rgba(190,255,220,0.95)';
+      ell(g, L * 1.5, -D * 1.4 + fl * 2, 4.5, 4.5);
+    }
+    if (o.teeth) {
+      g.fillStyle = '#f6f2e4';
+      for (i = 0; i < 5; i++) {
+        poly(g, [[L * (0.55 + i * 0.09), D * 0.12], [L * (0.6 + i * 0.09), D * 0.12],
+                 [L * (0.575 + i * 0.09), D * 0.42]]);
+      }
+    }
+    if (o.glow) {
+      for (i = 0; i < 6; i++) {
+        g.fillStyle = 'rgba(150,255,235,0.85)';
+        ell(g, -L * 0.7 + i * L * 0.28, D * 0.62, 2, 2);
+      }
+    }
+
+    /* mouth and eye */
+    g.strokeStyle = 'rgba(20,14,20,0.6)'; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(L * 0.86, D * 0.16); g.lineTo(L * 0.62, D * 0.3); g.stroke();
+    g.fillStyle = o.eye;
+    ell(g, L * 0.58, -D * 0.24, D * 0.28, D * 0.28);
+    g.fillStyle = o.pupil;
+    ell(g, L * 0.61, -D * 0.24, D * 0.15, D * 0.15);
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    ell(g, L * 0.56, -D * 0.3, D * 0.06, D * 0.06);
+
+    g.restore();
+  }
+
+  function drawFishScene(g, o, t) {
+    /* The shared halo blurs every stripe, fin and bubble here, which
+       turned the fish to mush. Outline the bodies instead. */
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    /* a wash of water, kept translucent so the static still reads */
+    g.fillStyle = 'rgba(20,90,130,0.20)';
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(90,200,220,0.10)';
+    for (var b = 0; b < 5; b++) {
+      g.fillRect(0, ((t * 0.02 + b * 26) % 130) - 6, W, 3);
+    }
+    for (var q = 0; q < 9; q++) {                       /* bubbles */
+      var bx = (q * 37 % 150) + 6;
+      var by = 124 - ((t * 0.035 + q * 33) % 132);
+      g.fillStyle = 'rgba(220,250,255,0.42)';
+      ell(g, bx + Math.sin(by * 0.1 + q) * 3, by, 1.6 + (q % 3), 1.6 + (q % 3));
+    }
+
+    g.save();
+    if (o.dir < 0) { g.translate(W, 0); g.scale(-1, 1); }
+
+    var lanes = [[0.62, 60, 1.55, 0.85], [0.42, 24, 0.5, 1.6], [0.78, 100, 0.42, 1.15]];
+    for (var i = 0; i < 3; i++) {
+      var span = W + o.len * 3;
+      var x = ((t * 0.028 * o.speed * lanes[i][3] + i * 71) % span) - o.len * 1.5;
+      var y = lanes[i][1] + Math.sin(t * 0.002 + i * 2) * 5;
+      g.save();
+      g.translate(x, y);
+      g.rotate(Math.sin(t * 0.003 + i) * 0.08);
+      fishShape(g, o, t, i * 1.7, lanes[i][2]);
+      g.restore();
+    }
+    g.restore();
+  }
+
+  /* First 25 swim left to right, last 25 right to left. */
+  var FISH = [
+    ['Clownfish',    { c1:'#ff7a1e', c2:'#ffb96e', c3:'#fdf6ea', c4:'#1c1c22', pat:4, tail:4, len:28, dep:17 }],
+    ['Blue tang',    { c1:'#1f6fe0', c2:'#5aa2f4', c3:'#ffd93c', c4:'#ffd93c', body:1, pat:5, tail:2, len:28, dep:16 }],
+    ['Angelfish',    { c1:'#f4d43c', c2:'#fff0a8', c3:'#1e1e26', c4:'#f4d43c', body:1, pat:1, tail:3, len:26, dep:16 }],
+    ['Butterflyfish',{ c1:'#ffd23c', c2:'#fff2b0', c3:'#f0f4f8', c4:'#1a1a22', body:1, pat:1, tail:0, len:26, dep:15 }],
+    ['Parrotfish',   { c1:'#20c0a8', c2:'#7ef0d8', c3:'#ff6fb0', c4:'#ff6fb0', pat:7, tail:2, len:34, dep:19 }],
+    ['Triggerfish',  { c1:'#2a3a68', c2:'#5d76b8', c3:'#ffd03c', c4:'#ffd03c', body:1, pat:6, tail:1, len:28, dep:17 }],
+    ['Lionfish',     { c1:'#d8322c', c2:'#ffb0a0', c3:'#fdf4ea', c4:'#f0684c', pat:1, tail:0, spine:1, len:26, dep:15 }],
+    ['Pufferfish',   { c1:'#f0c23c', c2:'#fff0b8', c3:'#3a2a10', c4:'#e0a828', body:5, pat:3, tail:4, len:24, dep:19 }],
+    ['Boxfish',      { c1:'#ffd430', c2:'#ffe98a', c3:'#1c1c24', c4:'#ffb020', body:4, pat:3, tail:0, len:22, dep:15 }],
+    ['Mandarinfish', { c1:'#1a58c8', c2:'#3f8ef0', c3:'#ff9020', c4:'#20d0a0', pat:6, tail:4, len:26, dep:16 }],
+    ['Discus',       { c1:'#e8622c', c2:'#ffb474', c3:'#2a4a9a', c4:'#e8622c', body:1, pat:2, tail:0, len:26, dep:16 }],
+    ['Betta',        { c1:'#8a2ce0', c2:'#c878ff', c3:'#ff3f88', c4:'#ff3f88', pat:5, tail:3, len:24, dep:15 }],
+    ['Guppy',        { c1:'#20b0e0', c2:'#8ce4ff', c3:'#ffb020', c4:'#ff7ad0', pat:3, tail:3, len:18, dep:11 }],
+    ['Neon tetra',   { c1:'#20d8f0', c2:'#bff4ff', c3:'#f02040', c4:'#a0e8ff', pat:2, tail:1, len:18, dep:10 }],
+    ['Goldfish',     { c1:'#ff9420', c2:'#ffd08a', c3:'#fff0c8', c4:'#ffb040', pat:0, tail:3, len:26, dep:16 }],
+    ['Koi',          { c1:'#fdf6ea', c2:'#ffffff', c3:'#f0602c', c4:'#ffd0a8', pat:3, tail:3, len:32, dep:17 }],
+    ['Swordtail',    { c1:'#f0503c', c2:'#ff9a84', c3:'#ffd03c', c4:'#f0503c', pat:2, tail:5, len:24, dep:13 }],
+    ['Molly',        { c1:'#2c2c38', c2:'#5e5e70', c3:'#ffd03c', c4:'#3a3a48', pat:0, tail:0, len:24, dep:14 }],
+    ['Rainbowfish',  { c1:'#20c8e0', c2:'#ffe040', c3:'#ff4090', c4:'#7ce860', pat:2, tail:1, len:26, dep:15 }],
+    ['Cardinalfish', { c1:'#e02840', c2:'#ff8090', c3:'#1c1c24', c4:'#ff6070', pat:1, tail:1, len:22, dep:13 }],
+    ['Damselfish',   { c1:'#2a50e0', c2:'#7c98ff', c3:'#ffe850', c4:'#2a50e0', pat:5, tail:1, len:20, dep:13 }],
+    ['Wrasse',       { c1:'#30c060', c2:'#8ce8a8', c3:'#ff50a0', c4:'#ffd040', pat:2, tail:0, len:28, dep:14 }],
+    ['Grouper',      { c1:'#7a5a8a', c2:'#b494c0', c3:'#ffe0a0', c4:'#6a4a78', pat:3, tail:4, len:36, dep:21 }],
+    ['Snapper',      { c1:'#f04060', c2:'#ff98a8', c3:'#ffd8b0', c4:'#e03050', pat:0, tail:1, len:32, dep:17 }],
+    ['Barracuda',    { c1:'#b8c4cc', c2:'#e8eef2', c3:'#5a6a76', c4:'#98a6b0', body:2, pat:2, tail:1, teeth:1, len:44, dep:16 }],
+
+    ['Tuna',         { c1:'#2a6a9a', c2:'#cfe0ea', c3:'#7ac0e0', c4:'#f0d040', body:3, pat:0, tail:2, len:38, dep:18 }],
+    ['Mackerel',     { c1:'#2e8a6a', c2:'#dfeee8', c3:'#12303a', c4:'#8ac0a8', body:3, pat:6, tail:2, len:34, dep:15 }],
+    ['Sardine',      { c1:'#a8bcc8', c2:'#eef4f8', c3:'#6a8a9a', c4:'#c8d8e2', body:2, pat:2, tail:1, len:22, dep:9 }],
+    ['Flying fish',  { c1:'#3a7ad0', c2:'#cfe4ff', c3:'#8ec4ff', c4:'#8ec4ff', body:2, pat:0, tail:1, spine:1, len:30, dep:12 }],
+    ['Marlin',       { c1:'#1e4a9a', c2:'#a8c8f0', c3:'#4a90e0', c4:'#1e4a9a', body:3, pat:1, tail:2, bill:1, sail:1, len:38, dep:16 }],
+    ['Sailfish',     { c1:'#2a5ab0', c2:'#b8d4f4', c3:'#6aa8e8', c4:'#2a5ab0', body:3, pat:3, tail:2, bill:1, sail:1, len:40, dep:15 }],
+    ['Swordfish',    { c1:'#3a4a5a', c2:'#c8d4de', c3:'#7a8a9a', c4:'#3a4a5a', body:3, pat:0, tail:2, bill:2, len:40, dep:15 }],
+    ['Anglerfish',   { c1:'#3a2a4a', c2:'#6a4a70', c3:'#a878c0', c4:'#2a1a38', body:5, pat:0, tail:4, lure:1, teeth:1, len:26, dep:18 }],
+    ['Lanternfish',  { c1:'#2a2a4a', c2:'#4a4a70', c3:'#7ce8d0', c4:'#3a3a58', body:2, pat:0, tail:1, glow:1, len:26, dep:11 }],
+    ['Hatchetfish',  { c1:'#cfd8e0', c2:'#f4f8fa', c3:'#8a98a4', c4:'#b0bcc6', body:1, pat:0, tail:1, glow:1, len:20, dep:14 }],
+    ['Viperfish',    { c1:'#1e2a3a', c2:'#3e5062', c3:'#60e0c0', c4:'#2a3a4a', body:2, pat:0, tail:1, teeth:1, glow:1, len:40, dep:11 }],
+    ['Moray eel',    { c1:'#5a7a3a', c2:'#a8c880', c3:'#e8e0a0', c4:'#4a6a2a', body:2, pat:3, tail:5, teeth:1, len:48, dep:11, wig:1.6 }],
+    ['Ribbon eel',   { c1:'#1a50e0', c2:'#6a90ff', c3:'#ffe040', c4:'#ffe040', body:2, pat:0, tail:5, len:46, dep:8, wig:1.8 }],
+    ['Trumpetfish',  { c1:'#c8a83c', c2:'#e8d48a', c3:'#8a6a20', c4:'#c8a83c', body:2, pat:2, tail:0, bill:1, len:44, dep:8 }],
+    ['Needlefish',   { c1:'#9ec4d8', c2:'#e4f2f8', c3:'#5a8a9a', c4:'#9ec4d8', body:2, pat:0, tail:1, bill:2, len:46, dep:7 }],
+    ['Sunfish',      { c1:'#8a94a0', c2:'#c8d0d8', c3:'#6a7480', c4:'#7a848e', body:1, pat:3, tail:4, dorsal:1, len:30, dep:22 }],
+    ['Flounder',     { c1:'#a08a58', c2:'#d8c898', c3:'#5a4a28', c4:'#a08a58', body:6, pat:3, tail:4, dorsal:0, pelvic:0, len:28, dep:14 }],
+    ['Manta ray',    { c1:'#2a3a4a', c2:'#e8eef2', c3:'#4a5a6a', c4:'#2a3a4a', body:6, pat:0, tail:5, dorsal:0, pelvic:0, pect:0, len:34, dep:20 }],
+    ['Stingray',     { c1:'#8a7250', c2:'#d0bc90', c3:'#5a4830', c4:'#8a7250', body:6, pat:3, tail:5, dorsal:0, pelvic:0, pect:0, len:30, dep:18 }],
+    ['Sturgeon',     { c1:'#6a7a6a', c2:'#adbcac', c3:'#48583f', c4:'#5a6a5a', body:2, pat:7, tail:1, barbel:1, len:42, dep:12 }],
+    ['Catfish',      { c1:'#4a4038', c2:'#8a7c6c', c3:'#2a2420', c4:'#3a3028', body:2, pat:0, tail:0, barbel:1, len:38, dep:14 }],
+    ['Piranha',      { c1:'#8a8a94', c2:'#f0a03c', c3:'#d02828', c4:'#7a7a84', body:1, pat:3, tail:1, teeth:1, len:24, dep:16 }],
+    ['Archerfish',   { c1:'#dfe4e8', c2:'#f8fafc', c3:'#2a2a32', c4:'#c8d0d6', pat:1, tail:1, len:26, dep:14 }],
+    ['Surgeonfish',  { c1:'#7a3ce0', c2:'#b088ff', c3:'#ffd83c', c4:'#ffd83c', body:1, pat:5, tail:2, len:28, dep:16 }],
+    ['Oscar',        { c1:'#2a2620', c2:'#5a5044', c3:'#f07020', c4:'#3a342c', body:1, pat:3, tail:4, len:30, dep:19 }]
+  ];
+
   /* ================================================================ */
 
   var CHANNELS = [
@@ -3832,6 +4116,20 @@
         }
       });
     }(ani));
+  }
+
+  for (var fsi = 0; fsi < FISH.length; fsi++) {
+    (function (i) {
+      var dir = i < 25 ? 1 : -1;          /* half each way */
+      CHANNELS.push({
+        name: FISH[i][0],
+        draw: function (g, t) {
+          var o = F(FISH[i][1]);
+          o.dir = dir;
+          drawFishScene(g, o, t);
+        }
+      });
+    }(fsi));
   }
 
   var current = 0;
