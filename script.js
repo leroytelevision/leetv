@@ -2324,6 +2324,726 @@
     g.restore();
   }
 
+  /* ================================================================
+     A small 3D engine: rotate, project, depth-sort, shade.
+     Geometry is built once and cached — only the transform runs per
+     frame. Normals are flipped outward against the centroid so a
+     solid shades correctly whatever winding its faces were built in.
+     ================================================================ */
+
+  var CAMD = 300;
+  var GEO = {};
+
+  function geo(name, build) {
+    return GEO[name] || (GEO[name] = build());
+  }
+
+  function rot3(p, rx, ry, rz) {
+    var x = p[0], y = p[1], z = p[2], c, s, q;
+    c = Math.cos(rx); s = Math.sin(rx);
+    q = y * c - z * s; z = y * s + z * c; y = q;
+    c = Math.cos(ry); s = Math.sin(ry);
+    q = x * c + z * s; z = -x * s + z * c; x = q;
+    if (rz) { c = Math.cos(rz); s = Math.sin(rz); q = x * c - y * s; y = x * s + y * c; x = q; }
+    return [x, y, z];
+  }
+
+  function pxy(p, sc) {
+    var k = CAMD / (CAMD + p[2]);
+    return [80 + p[0] * k * sc, 60 + p[1] * k * sc, k];
+  }
+
+  function xform(V, rx, ry, rz) {
+    var out = [], i;
+    for (i = 0; i < V.length; i++) out.push(rot3(V[i], rx, ry, rz));
+    return out;
+  }
+
+  function wire(g, R, E, sc, rgb, lw) {
+    for (var i = 0; i < E.length; i++) {
+      var a = pxy(R[E[i][0]], sc), b = pxy(R[E[i][1]], sc);
+      var d = (a[2] + b[2]) * 0.5;
+      g.strokeStyle = 'rgba(' + rgb + ',' + Math.min(1, 0.18 + d * 0.85).toFixed(2) + ')';
+      g.lineWidth = Math.max(0.6, lw * d);
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+    }
+  }
+
+  function dots(g, R, sc, rgb, size) {
+    var i, order = [];
+    for (i = 0; i < R.length; i++) order.push(i);
+    order.sort(function (a, b) { return R[b][2] - R[a][2]; });
+    for (i = 0; i < order.length; i++) {
+      var p = pxy(R[order[i]], sc);
+      g.fillStyle = 'rgba(' + rgb + ',' + Math.min(1, 0.15 + p[2] * 0.9).toFixed(2) + ')';
+      ell(g, p[0], p[1], size * p[2], size * p[2]);
+    }
+  }
+
+  function solid(g, R, F, sc, rgb, edge) {
+    var i, k, order = [];
+    for (i = 0; i < F.length; i++) {
+      var f = F[i], z = 0;
+      for (k = 0; k < f.length; k++) z += R[f[k]][2];
+      order.push([i, z / f.length]);
+    }
+    order.sort(function (a, b) { return b[1] - a[1]; });   /* far first */
+    for (i = 0; i < order.length; i++) {
+      var fc = F[order[i][0]];
+      var a = R[fc[0]], b = R[fc[1]], c = R[fc[2]];
+      var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      var vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      var cxm = 0, cym = 0, czm = 0;
+      for (k = 0; k < fc.length; k++) { cxm += R[fc[k]][0]; cym += R[fc[k]][1]; czm += R[fc[k]][2]; }
+      if (nx * cxm + ny * cym + nz * czm < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      var sh = (nx * -0.42 + ny * -0.56 + nz * -0.72) / len;
+      sh = 0.22 + Math.max(0, sh) * 0.9;
+      g.fillStyle = 'rgb(' + ((rgb[0] * sh) | 0) + ',' + ((rgb[1] * sh) | 0) + ',' + ((rgb[2] * sh) | 0) + ')';
+      g.beginPath();
+      for (k = 0; k < fc.length; k++) {
+        var s = pxy(R[fc[k]], sc);
+        if (k) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]);
+      }
+      g.closePath();
+      g.fill();
+      if (edge) { g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 0.7; g.stroke(); }
+    }
+  }
+
+  /* --- geometry -------------------------------------------------- */
+
+  function autoEdges(V, tol) {
+    var i, j, d, min = Infinity, E = [];
+    for (i = 0; i < V.length; i++) for (j = i + 1; j < V.length; j++) {
+      d = Math.hypot(V[i][0] - V[j][0], V[i][1] - V[j][1], V[i][2] - V[j][2]);
+      if (d < min) min = d;
+    }
+    for (i = 0; i < V.length; i++) for (j = i + 1; j < V.length; j++) {
+      d = Math.hypot(V[i][0] - V[j][0], V[i][1] - V[j][1], V[i][2] - V[j][2]);
+      if (d < min * (1 + tol)) E.push([i, j]);
+    }
+    return E;
+  }
+
+  function autoTris(V, E) {
+    var set = {}, i, j, k, F = [];
+    for (i = 0; i < E.length; i++) { set[E[i][0] + ',' + E[i][1]] = 1; set[E[i][1] + ',' + E[i][0]] = 1; }
+    for (i = 0; i < V.length; i++)
+      for (j = i + 1; j < V.length; j++)
+        for (k = j + 1; k < V.length; k++)
+          if (set[i + ',' + j] && set[j + ',' + k] && set[i + ',' + k]) F.push([i, j, k]);
+    return F;
+  }
+
+  function gTetra() {
+    var V = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+    return { V: V, F: [[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]], E: autoEdges(V, 0.1) };
+  }
+
+  function gCube() {
+    var V = [], x, y, z;
+    for (x = -1; x <= 1; x += 2) for (y = -1; y <= 1; y += 2) for (z = -1; z <= 1; z += 2) V.push([x, y, z]);
+    /* index = ((x+1)/2)*4 + ((y+1)/2)*2 + (z+1)/2 */
+    var F = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+    return { V: V, F: F, E: autoEdges(V, 0.1) };
+  }
+
+  function gOcta() {
+    var V = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+    var E = autoEdges(V, 0.1);
+    return { V: V, F: autoTris(V, E), E: E };
+  }
+
+  function gIcosa() {
+    var p = 1.6180339887, V = [], i;
+    var base = [[0,1,p],[0,1,-p],[0,-1,p],[0,-1,-p]];
+    for (i = 0; i < 4; i++) {
+      V.push(base[i]);
+      V.push([base[i][1], base[i][2], base[i][0]]);
+      V.push([base[i][2], base[i][0], base[i][1]]);
+    }
+    var E = autoEdges(V, 0.12);
+    return { V: V, F: autoTris(V, E), E: E };
+  }
+
+  function gDodeca() {
+    var p = 1.6180339887, ip = 1 / p, V = [], sx, sy, sz;
+    for (sx = -1; sx <= 1; sx += 2) for (sy = -1; sy <= 1; sy += 2) for (sz = -1; sz <= 1; sz += 2) V.push([sx, sy, sz]);
+    for (sy = -1; sy <= 1; sy += 2) for (sz = -1; sz <= 1; sz += 2) {
+      V.push([0, sy * ip, sz * p]); V.push([sy * ip, sz * p, 0]); V.push([sy * p, 0, sz * ip]);
+    }
+    return { V: V, E: autoEdges(V, 0.12) };
+  }
+
+  function gTorus(nu, nv, R, r) {
+    var V = [], F = [], E = [], u, v;
+    for (u = 0; u < nu; u++) for (v = 0; v < nv; v++) {
+      var a = u / nu * TAU, b = v / nv * TAU;
+      V.push([(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)]);
+    }
+    for (u = 0; u < nu; u++) for (v = 0; v < nv; v++) {
+      var i0 = u * nv + v, i1 = ((u + 1) % nu) * nv + v;
+      var i2 = ((u + 1) % nu) * nv + (v + 1) % nv, i3 = u * nv + (v + 1) % nv;
+      F.push([i0, i1, i2, i3]); E.push([i0, i1]); E.push([i0, i3]);
+    }
+    return { V: V, F: F, E: E };
+  }
+
+  function gSphere(nu, nv, r) {
+    var V = [], F = [], E = [], u, v;
+    for (u = 0; u <= nu; u++) for (v = 0; v < nv; v++) {
+      var ph = u / nu * Math.PI, th = v / nv * TAU;
+      V.push([r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph), r * Math.sin(ph) * Math.sin(th)]);
+    }
+    for (u = 0; u < nu; u++) for (v = 0; v < nv; v++) {
+      var i0 = u * nv + v, i1 = (u + 1) * nv + v;
+      var i2 = (u + 1) * nv + (v + 1) % nv, i3 = u * nv + (v + 1) % nv;
+      F.push([i0, i1, i2, i3]); E.push([i0, i1]); E.push([i0, i3]);
+    }
+    return { V: V, F: F, E: E };
+  }
+
+  function gTube(nu, nv, rTop, rBot, h) {   /* cylinder / cone / hyperboloid base */
+    var V = [], F = [], u, v;
+    for (u = 0; u <= nu; u++) for (v = 0; v < nv; v++) {
+      var f = u / nu, r = rBot + (rTop - rBot) * f, th = v / nv * TAU;
+      V.push([r * Math.cos(th), -h / 2 + h * f, r * Math.sin(th)]);
+    }
+    for (u = 0; u < nu; u++) for (v = 0; v < nv; v++) {
+      F.push([u * nv + v, (u + 1) * nv + v, (u + 1) * nv + (v + 1) % nv, u * nv + (v + 1) % nv]);
+    }
+    return { V: V, F: F };
+  }
+
+  function gGrid(n, sp) {
+    var V = [], E = [], i, j;
+    for (i = 0; i <= n; i++) for (j = 0; j <= n; j++) V.push([(i - n / 2) * sp, 0, (j - n / 2) * sp]);
+    for (i = 0; i <= n; i++) for (j = 0; j <= n; j++) {
+      if (i < n) E.push([i * (n + 1) + j, (i + 1) * (n + 1) + j]);
+      if (j < n) E.push([i * (n + 1) + j, i * (n + 1) + j + 1]);
+    }
+    return { V: V, E: E, n: n };
+  }
+
+  function gTesseract() {
+    var V = [], E = [], i, j, a, b, c, d;
+    for (a = -1; a <= 1; a += 2) for (b = -1; b <= 1; b += 2)
+      for (c = -1; c <= 1; c += 2) for (d = -1; d <= 1; d += 2) V.push([a, b, c, d]);
+    for (i = 0; i < 16; i++) for (j = i + 1; j < 16; j++) {
+      var diff = 0;
+      for (var k = 0; k < 4; k++) if (V[i][k] !== V[j][k]) diff++;
+      if (diff === 1) E.push([i, j]);
+    }
+    return { V: V, E: E };
+  }
+
+  function proj4(V, aw, rx, ry) {
+    var out = [], i;
+    for (i = 0; i < V.length; i++) {
+      var x = V[i][0], y = V[i][1], z = V[i][2], w = V[i][3];
+      var c = Math.cos(aw), s = Math.sin(aw);
+      var x2 = x * c - w * s, w2 = x * s + w * c;
+      var c2 = Math.cos(aw * 0.7), s2 = Math.sin(aw * 0.7);
+      var y2 = y * c2 - w2 * s2, w3 = y * s2 + w2 * c2;
+      var k = 2.4 / (2.4 + w3);
+      out.push(rot3([x2 * k, y2 * k, z * k], rx, ry, 0));
+    }
+    return out;
+  }
+
+  function knotV(n, p, q, R, r) {
+    var V = [], E = [], i;
+    for (i = 0; i < n; i++) {
+      var u = i / n * TAU * 1;
+      var ph = p * u, th = q * u;
+      var rad = R + r * Math.cos(th);
+      V.push([rad * Math.cos(ph), r * Math.sin(th), rad * Math.sin(ph)]);
+      E.push([i, (i + 1) % n]);
+    }
+    return { V: V, E: E };
+  }
+
+  function cubeAt(cx, cy, cz, s) {
+    var V = [], x, y, z;
+    for (x = -1; x <= 1; x += 2) for (y = -1; y <= 1; y += 2) for (z = -1; z <= 1; z += 2)
+      V.push([cx + x * s, cy + y * s, cz + z * s]);
+    return V;
+  }
+  var CUBE_F = [[0,1,3,2],[4,6,7,5],[0,4,5,1],[2,3,7,6],[0,2,6,4],[1,5,7,3]];
+
+  function manyCubes(list, s) {           /* list of [x,y,z] centres */
+    var V = [], F = [], i, k;
+    for (i = 0; i < list.length; i++) {
+      var base = V.length;
+      var c = cubeAt(list[i][0], list[i][1], list[i][2], s);
+      for (k = 0; k < 8; k++) V.push(c[k]);
+      for (k = 0; k < 6; k++) F.push([base + CUBE_F[k][0], base + CUBE_F[k][1], base + CUBE_F[k][2], base + CUBE_F[k][3]]);
+    }
+    return { V: V, F: F };
+  }
+
+  var G3 = [
+    ['Tetrahedron', function (g, t) { var m = geo('tet', gTetra);
+      solid(g, xform(m.V, t*0.0011, t*0.0017, 0), m.F, 32, [255,118,86], 1); }],
+
+    ['Cube', function (g, t) { var m = geo('cub', gCube);
+      solid(g, xform(m.V, t*0.0009, t*0.0014, t*0.0005), m.F, 30, [90,190,255], 1); }],
+
+    ['Octahedron', function (g, t) { var m = geo('oct', gOcta);
+      solid(g, xform(m.V, t*0.0013, t*0.0019, 0), m.F, 38, [180,120,255], 1); }],
+
+    ['Icosahedron', function (g, t) { var m = geo('ico', gIcosa);
+      solid(g, xform(m.V, t*0.001, t*0.0015, 0), m.F, 22, [90,230,170], 1); }],
+
+    ['Dodecahedron', function (g, t) { var m = geo('dod', gDodeca);
+      wire(g, xform(m.V, t*0.001, t*0.0016, 0), m.E, 26, '255,210,110', 2); }],
+
+    ['Torus', function (g, t) { var m = geo('tor', function(){ return gTorus(20, 12, 1.5, 0.6); });
+      solid(g, xform(m.V, t*0.0012, t*0.0017, 0), m.F, 30, [255,120,190], 0); }],
+
+    ['Sphere', function (g, t) { var m = geo('sph', function(){ return gSphere(12, 18, 1.4); });
+      solid(g, xform(m.V, 0.4, t*0.0016, 0), m.F, 34, [110,200,255], 0); }],
+
+    ['Cone', function (g, t) { var m = geo('con', function(){ return gTube(8, 16, 0.02, 1.3, 2.4); });
+      solid(g, xform(m.V, t*0.0008 + 0.35, t*0.0018, 0), m.F, 30, [255,180,70], 0); }],
+
+    ['Cylinder', function (g, t) { var m = geo('cyl', function(){ return gTube(6, 16, 1.1, 1.1, 2.4); });
+      solid(g, xform(m.V, t*0.0011 + 0.3, t*0.0016, 0), m.F, 30, [160,255,150], 0); }],
+
+    ['Hyperboloid', function (g, t) {
+      var V = [], E = [], i, n = 22;
+      for (i = 0; i < n; i++) {
+        var a = i / n * TAU;
+        V.push([Math.cos(a) * 1.3, -1.3, Math.sin(a) * 1.3]);
+        V.push([Math.cos(a + 1.3) * 1.3, 1.3, Math.sin(a + 1.3) * 1.3]);
+        E.push([i * 2, i * 2 + 1]);
+        E.push([i * 2, ((i + 1) % n) * 2]);
+        E.push([i * 2 + 1, ((i + 1) % n) * 2 + 1]);
+      }
+      wire(g, xform(V, 0.25, t*0.0014, 0), E, 32, '120,255,235', 1.6); }],
+
+    ['Tesseract', function (g, t) { var m = geo('tes', gTesseract);
+      wire(g, proj4(m.V, t*0.0011, t*0.0007, t*0.0013), m.E, 36, '255,150,240', 1.8); }],
+
+    ['Torus knot', function (g, t) { var m = geo('kn32', function(){ return knotV(140, 3, 2, 1.5, 0.55); });
+      wire(g, xform(m.V, t*0.0009, t*0.0015, 0), m.E, 30, '120,220,255', 2.6); }],
+
+    ['Trefoil knot', function (g, t) { var m = geo('kn23', function(){ return knotV(140, 2, 3, 1.4, 0.6); });
+      wire(g, xform(m.V, t*0.0013, t*0.001, 0), m.E, 30, '255,190,90', 2.6); }],
+
+    ['Mobius strip', function (g, t) {
+      var m = geo('mob', function () {
+        var V = [], F = [], i, n = 44;
+        for (i = 0; i < n; i++) {
+          var u = i / n * TAU, h = u / 2;
+          for (var s = -1; s <= 1; s += 2) {
+            var r = 1.4 + s * 0.42 * Math.cos(h);
+            V.push([r * Math.cos(u), s * 0.42 * Math.sin(h), r * Math.sin(u)]);
+          }
+        }
+        for (i = 0; i < n; i++) {
+          var a = i * 2, b = ((i + 1) % n) * 2;
+          F.push([a, a + 1, b + 1, b]);
+        }
+        return { V: V, F: F };
+      });
+      solid(g, xform(m.V, 0.5, t*0.0014, 0), m.F, 30, [255,120,150], 0); }],
+
+    ['Helix spring', function (g, t) {
+      var V = [], E = [], i, n = 120;
+      for (i = 0; i < n; i++) {
+        var u = i / n * TAU * 5;
+        V.push([Math.cos(u) * 1.1, -1.6 + i / n * 3.2, Math.sin(u) * 1.1]);
+        if (i) E.push([i - 1, i]);
+      }
+      wire(g, xform(V, 0.2, t*0.0016, 0), E, 32, '200,220,255', 2.4); }],
+
+    ['DNA helix', function (g, t) {
+      var V = [], E = [], i, n = 60;
+      for (i = 0; i < n; i++) {
+        var u = i / n * TAU * 3, y = -1.7 + i / n * 3.4;
+        V.push([Math.cos(u) * 1.0, y, Math.sin(u) * 1.0]);
+        V.push([Math.cos(u + Math.PI) * 1.0, y, Math.sin(u + Math.PI) * 1.0]);
+        if (i) { E.push([(i-1)*2, i*2]); E.push([(i-1)*2+1, i*2+1]); }
+        if (i % 3 === 0) E.push([i*2, i*2+1]);
+      }
+      wire(g, xform(V, 0.1, t*0.0013, 0), E, 30, '120,255,190', 2); }],
+
+    ['Wireframe globe', function (g, t) { var m = geo('glb', function(){ return gSphere(9, 14, 1.5); });
+      wire(g, xform(m.V, 0.42, t*0.0013, 0), m.E, 32, '150,200,255', 1.4); }],
+
+    ['Ripple grid', function (g, t) {
+      var m = geo('grd', function(){ return gGrid(12, 0.34); });
+      var V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i], d = Math.hypot(p[0], p[2]);
+        V.push([p[0], Math.sin(d * 3.4 - t * 0.005) * 0.42, p[2]]);
+      }
+      wire(g, xform(V, 0.95, t*0.0004, 0), m.E, 34, '110,240,255', 1.3); }],
+
+    ['Terrain waves', function (g, t) {
+      var m = geo('grd2', function(){ return gGrid(14, 0.3); });
+      var V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i];
+        V.push([p[0], Math.sin(p[0]*2.1 + t*0.0022) * 0.3 + Math.cos(p[2]*1.8 - t*0.0017) * 0.3, p[2]]);
+      }
+      wire(g, xform(V, 1.05, t*0.0003, 0), m.E, 34, '160,255,150', 1.3); }],
+
+    ['Tunnel', function (g, t) {
+      var i, k, V = [], E = [], n = 14, seg = 12;
+      for (i = 0; i < n; i++) {
+        var z = ((i * 1.2 + t * 0.0035) % (n * 1.2)) - n * 0.6;
+        var base = V.length;
+        for (k = 0; k < seg; k++) {
+          var a = k / seg * TAU + z * 0.25;
+          V.push([Math.cos(a) * 1.5, Math.sin(a) * 1.5, z * 3]);
+          E.push([base + k, base + (k + 1) % seg]);
+        }
+      }
+      wire(g, xform(V, 0, 0, 0), E, 46, '255,140,220', 2); }],
+
+    ['Point sphere', function (g, t) {
+      var V = [], i, n = 220;
+      for (i = 0; i < n; i++) {
+        var y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(Math.max(0, 1 - y * y));
+        var th = i * 2.39996 + t * 0.0012;
+        V.push([Math.cos(th) * r * 1.5, y * 1.5, Math.sin(th) * r * 1.5]);
+      }
+      dots(g, xform(V, 0.3, t*0.0009, 0), 32, '140,240,255', 1.6); }],
+
+    ['Lorenz attractor', function (g, t) {
+      var m = geo('lor', function () {
+        var x = 0.1, y = 0, z = 0, V = [], E = [], i;
+        for (i = 0; i < 900; i++) {
+          var dx = 10 * (y - x), dy = x * (28 - z) - y, dz = x * y - (8 / 3) * z;
+          x += dx * 0.006; y += dy * 0.006; z += dz * 0.006;
+          V.push([x * 0.07, (z - 25) * 0.07, y * 0.07]);
+          if (i) E.push([i - 1, i]);
+        }
+        return { V: V, E: E };
+      });
+      wire(g, xform(m.V, 0.15, t*0.0009, 0), m.E, 30, '255,200,120', 1.4); }],
+
+    ['Starfield cube', function (g, t) {
+      var m = geo('stars', function () {
+        var V = [], i;
+        for (i = 0; i < 180; i++) V.push([(i*13%100)/50-1, (i*29%100)/50-1, (i*47%100)/50-1]);
+        return { V: V };
+      });
+      dots(g, xform(m.V, t*0.0007, t*0.0011, t*0.0005), 40, '235,245,255', 1.4);
+      var c = geo('cub', gCube);
+      wire(g, xform(c.V, t*0.0007, t*0.0011, t*0.0005), c.E, 40, '90,140,200', 1); }],
+
+    ['Particle vortex', function (g, t) {
+      var V = [], i, n = 200;
+      for (i = 0; i < n; i++) {
+        var f = i / n, a = f * TAU * 4 + t * 0.003;
+        var r = 0.2 + f * 1.5;
+        V.push([Math.cos(a) * r, -1.4 + f * 2.8, Math.sin(a) * r]);
+      }
+      dots(g, xform(V, 0.2, t*0.0008, 0), 32, '255,160,220', 1.7); }],
+
+    ['Cube array', function (g, t) {
+      var m = geo('c27', function () {
+        var list = [], x, y, z;
+        for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) list.push([x*1.1, y*1.1, z*1.1]);
+        return manyCubes(list, 0.36);
+      });
+      solid(g, xform(m.V, t*0.001, t*0.0014, 0), m.F, 24, [255,150,90], 1); }],
+
+    ['Nested cubes', function (g, t) {
+      var c = geo('cub', gCube), i;
+      for (i = 0; i < 3; i++) {
+        var s = 1 + i * 0.8;
+        var V = c.V.map(function (p) { return [p[0]*s, p[1]*s, p[2]*s]; });
+        wire(g, xform(V, t*0.0009*(i%2?-1:1), t*0.0013*(i%2?1:-1), 0), c.E, 20,
+             i === 0 ? '255,220,120' : i === 1 ? '120,255,200' : '180,150,255', 1.8);
+      } }],
+
+    ['Exploding cube', function (g, t) {
+      var c = (t % 3600) / 3600;
+      var burst = c < 0.5 ? Math.sin(c / 0.5 * Math.PI) : 0;
+      var list = [], x, y, z;
+      for (x = -1; x <= 1; x += 2) for (y = -1; y <= 1; y += 2) for (z = -1; z <= 1; z += 2)
+        list.push([x * (0.55 + burst * 1.5), y * (0.55 + burst * 1.5), z * (0.55 + burst * 1.5)]);
+      var m = manyCubes(list, 0.5);
+      solid(g, xform(m.V, t*0.0012, t*0.0016, 0), m.F, 26, [255,110,110], 1); }],
+
+    ['Cube to sphere', function (g, t) {
+      var m = geo('sph2', function(){ return gSphere(10, 14, 1.0); });
+      var f = 0.5 + 0.5 * Math.sin(t * 0.0013), V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i], mx = Math.max(Math.abs(p[0]), Math.abs(p[1]), Math.abs(p[2])) || 1;
+        V.push([p[0]*(1-f) + p[0]/mx*f, p[1]*(1-f) + p[1]/mx*f, p[2]*(1-f) + p[2]/mx*f]);
+      }
+      solid(g, xform(V, t*0.001, t*0.0015, 0), m.F, 42, [200,160,255], 0); }],
+
+    ['Gyroscope', function (g, t) {
+      var i, k, rings = [[t*0.002, 0, 0], [0, t*0.0017, 0], [0, 0, t*0.0023]];
+      var cols = ['255,120,120', '120,255,160', '140,180,255'];
+      for (i = 0; i < 3; i++) {
+        var V = [], E = [], n = 40;
+        for (k = 0; k < n; k++) {
+          var a = k / n * TAU;
+          if (i === 0) V.push([Math.cos(a)*1.5, Math.sin(a)*1.5, 0]);
+          else if (i === 1) V.push([Math.cos(a)*1.5, 0, Math.sin(a)*1.5]);
+          else V.push([0, Math.cos(a)*1.5, Math.sin(a)*1.5]);
+          E.push([k, (k + 1) % n]);
+        }
+        wire(g, xform(V, rings[i][0] + 0.3, rings[i][1] + t*0.0006, rings[i][2]), E, 30, cols[i], 2.2);
+      } }],
+    ['Linked rings', function (g, t) {
+      var i, k, n = 4;
+      for (i = 0; i < n; i++) {
+        var V = [], E = [], m = 34;
+        for (k = 0; k < m; k++) {
+          var a = k / m * TAU;
+          var p = [Math.cos(a) * 0.85, Math.sin(a) * 0.85, 0];
+          if (i % 2) { var q = p[1]; p[1] = p[2]; p[2] = q; }
+          p[0] += (i - (n - 1) / 2) * 1.15;
+          V.push(p); E.push([k, (k + 1) % m]);
+        }
+        wire(g, xform(V, 0.35, t*0.0012, 0), E, 34,
+             i % 2 ? '255,200,120' : '140,220,255', 2.4);
+      } }],
+
+    ['Menger sponge', function (g, t) {
+      var m = geo('men', function () {
+        var list = [], x, y, z;
+        for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) {
+          var zeros = (x===0?1:0) + (y===0?1:0) + (z===0?1:0);
+          if (zeros < 2) list.push([x*1.0, y*1.0, z*1.0]);
+        }
+        return manyCubes(list, 0.5);
+      });
+      solid(g, xform(m.V, t*0.0009, t*0.0013, 0), m.F, 26, [200,200,215], 1); }],
+
+    ['Sierpinski tetra', function (g, t) {
+      var m = geo('sie', function () {
+        var base = [[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]];
+        var pts = [[0,0,0]], d;
+        for (d = 0; d < 2; d++) {
+          var next = [], i, k;
+          for (i = 0; i < pts.length; i++) for (k = 0; k < 4; k++)
+            next.push([pts[i][0] + base[k][0] * (d ? 0.55 : 1.1),
+                       pts[i][1] + base[k][1] * (d ? 0.55 : 1.1),
+                       pts[i][2] + base[k][2] * (d ? 0.55 : 1.1)]);
+          pts = next;
+        }
+        var V = [], F = [], i, k;
+        for (i = 0; i < pts.length; i++) {
+          var b = V.length;
+          for (k = 0; k < 4; k++) V.push([pts[i][0] + base[k][0]*0.28, pts[i][1] + base[k][1]*0.28, pts[i][2] + base[k][2]*0.28]);
+          F.push([b,b+1,b+2]); F.push([b,b+3,b+1]); F.push([b,b+2,b+3]); F.push([b+1,b+3,b+2]);
+        }
+        return { V: V, F: F };
+      });
+      solid(g, xform(m.V, t*0.001, t*0.0015, 0), m.F, 24, [255,190,80], 0); }],
+
+    ['Fractal tree', function (g, t) {
+      var m = geo('tree', function () {
+        var V = [[0,1.7,0]], E = [];
+        (function grow(from, dir, len, depth) {
+          if (depth === 0) return;
+          for (var b = 0; b < 3; b++) {
+            var a = b * TAU / 3 + depth;
+            var nd = [dir[0]*0.55 + Math.cos(a)*0.55, dir[1]*0.8 - 0.25, dir[2]*0.55 + Math.sin(a)*0.55];
+            var to = [V[from][0] + nd[0]*len, V[from][1] + nd[1]*len, V[from][2] + nd[2]*len];
+            V.push(to); var idx = V.length - 1;
+            E.push([from, idx]);
+            grow(idx, nd, len * 0.62, depth - 1);
+          }
+        }(0, [0,-1,0], 1.0, 3));
+        return { V: V, E: E };
+      });
+      wire(g, xform(m.V, 0.1, t*0.0011, 0), m.E, 30, '150,255,170', 1.8); }],
+
+    ['Spiral staircase', function (g, t) {
+      var list = [], i, n = 16;
+      for (i = 0; i < n; i++) {
+        var a = i / n * TAU * 1.6;
+        list.push([Math.cos(a) * 1.1, -1.5 + i / n * 3, Math.sin(a) * 1.1]);
+      }
+      var m = manyCubes(list, 0.32);
+      solid(g, xform(m.V, 0.2, t*0.0014, 0), m.F, 28, [120,200,255], 1); }],
+
+    ['Twisting ribbon', function (g, t) {
+      var V = [], F = [], i, n = 40;
+      for (i = 0; i <= n; i++) {
+        var f = i / n, y = -1.7 + f * 3.4, tw = f * 5 + t * 0.002;
+        V.push([Math.cos(tw) * 0.9, y, Math.sin(tw) * 0.9]);
+        V.push([-Math.cos(tw) * 0.9, y, -Math.sin(tw) * 0.9]);
+        if (i) F.push([(i-1)*2, (i-1)*2+1, i*2+1, i*2]);
+      }
+      solid(g, xform(V, 0.15, t*0.0009, 0), F, 30, [255,140,200], 0); }],
+
+    ['Vector field', function (g, t) {
+      var V = [], E = [], i = 0, x, y, z;
+      for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) {
+        var px = x * 1.1, py = y * 1.1, pz = z * 1.1;
+        var a = t * 0.003 + px + py + pz;
+        V.push([px, py, pz]);
+        V.push([px + Math.cos(a) * 0.45, py + Math.sin(a) * 0.45, pz + Math.cos(a * 0.7) * 0.45]);
+        E.push([i, i + 1]); i += 2;
+      }
+      wire(g, xform(V, t*0.0006, t*0.001, 0), E, 26, '255,230,140', 2.2); }],
+
+    ['Pulsing sphere', function (g, t) {
+      var m = geo('sph3', function(){ return gSphere(11, 16, 1.0); });
+      var s = 1.15 + Math.sin(t * 0.005) * 0.35, V = [], i;
+      for (i = 0; i < m.V.length; i++) V.push([m.V[i][0]*s, m.V[i][1]*s, m.V[i][2]*s]);
+      solid(g, xform(V, 0.3, t*0.0012, 0), m.F, 34, [255,120,140], 0); }],
+
+    ['Wave sphere', function (g, t) {
+      var m = geo('sph4', function(){ return gSphere(13, 20, 1.0); });
+      var V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i];
+        var s = 1.35 + Math.sin(p[1] * 5 + t * 0.005) * 0.22;
+        V.push([p[0]*s, p[1]*s, p[2]*s]);
+      }
+      solid(g, xform(V, 0.25, t*0.0011, 0), m.F, 32, [120,220,255], 0); }],
+
+    ['Prism column', function (g, t) { var m = geo('pri', function(){ return gTube(1, 8, 1.1, 1.1, 3); });
+      solid(g, xform(m.V, t*0.0008 + 0.25, t*0.0018, 0), m.F, 28, [220,180,255], 1); }],
+
+    ['Stellated octahedron', function (g, t) {
+      var m = geo('ste', function () {
+        var a = gTetra(), V = [], F = [], i, k;
+        for (i = 0; i < 4; i++) V.push(a.V[i]);
+        for (i = 0; i < 4; i++) V.push([-a.V[i][0], -a.V[i][1], -a.V[i][2]]);
+        for (k = 0; k < a.F.length; k++) F.push(a.F[k]);
+        for (k = 0; k < a.F.length; k++) F.push([a.F[k][0]+4, a.F[k][1]+4, a.F[k][2]+4]);
+        return { V: V, F: F };
+      });
+      solid(g, xform(m.V, t*0.0012, t*0.0016, 0), m.F, 30, [255,220,120], 1); }],
+
+    ['Cuboctahedron', function (g, t) {
+      var m = geo('cbo', function () {
+        var V = [], s1, s2;
+        for (s1 = -1; s1 <= 1; s1 += 2) for (s2 = -1; s2 <= 1; s2 += 2) {
+          V.push([s1, s2, 0]); V.push([s1, 0, s2]); V.push([0, s1, s2]);
+        }
+        return { V: V, E: autoEdges(V, 0.12) };
+      });
+      wire(g, xform(m.V, t*0.0011, t*0.0015, 0), m.E, 36, '140,255,220', 2); }],
+
+    ['Slotted disc', function (g, t) {
+      var V = [], F = [], i, n = 12;
+      for (i = 0; i < n; i++) {
+        var a0 = i / n * TAU, a1 = a0 + TAU / n * 0.55, b = V.length;
+        V.push([Math.cos(a0)*0.5, -0.12, Math.sin(a0)*0.5]);
+        V.push([Math.cos(a1)*0.5, -0.12, Math.sin(a1)*0.5]);
+        V.push([Math.cos(a1)*1.5, -0.12, Math.sin(a1)*1.5]);
+        V.push([Math.cos(a0)*1.5, -0.12, Math.sin(a0)*1.5]);
+        V.push([Math.cos(a0)*0.5, 0.12, Math.sin(a0)*0.5]);
+        V.push([Math.cos(a1)*0.5, 0.12, Math.sin(a1)*0.5]);
+        V.push([Math.cos(a1)*1.5, 0.12, Math.sin(a1)*1.5]);
+        V.push([Math.cos(a0)*1.5, 0.12, Math.sin(a0)*1.5]);
+        F.push([b,b+1,b+2,b+3]); F.push([b+4,b+7,b+6,b+5]);
+        F.push([b+3,b+2,b+6,b+7]); F.push([b,b+4,b+5,b+1]);
+      }
+      solid(g, xform(V, 0.55, t*0.0022, 0), F, 32, [255,170,90], 0); }],
+
+    ['Meshing gears', function (g, t) {
+      var i, k;
+      for (k = 0; k < 2; k++) {
+        var V = [], F = [], n = 10, off = k ? 1.9 : -1.9, spin = t * 0.0024 * (k ? -1 : 1);
+        for (i = 0; i < n; i++) {
+          var a0 = i / n * TAU + spin + (k ? TAU / n / 2 : 0), a1 = a0 + TAU / n * 0.5, b = V.length;
+          V.push([off + Math.cos(a0)*0.55, -0.2, Math.sin(a0)*0.55]);
+          V.push([off + Math.cos(a1)*0.55, -0.2, Math.sin(a1)*0.55]);
+          V.push([off + Math.cos(a1)*1.15, -0.2, Math.sin(a1)*1.15]);
+          V.push([off + Math.cos(a0)*1.15, -0.2, Math.sin(a0)*1.15]);
+          V.push([off + Math.cos(a0)*0.55, 0.2, Math.sin(a0)*0.55]);
+          V.push([off + Math.cos(a1)*0.55, 0.2, Math.sin(a1)*0.55]);
+          V.push([off + Math.cos(a1)*1.15, 0.2, Math.sin(a1)*1.15]);
+          V.push([off + Math.cos(a0)*1.15, 0.2, Math.sin(a0)*1.15]);
+          F.push([b,b+1,b+2,b+3]); F.push([b+4,b+7,b+6,b+5]);
+          F.push([b+3,b+2,b+6,b+7]); F.push([b,b+4,b+5,b+1]);
+        }
+        solid(g, xform(V, 0.75, 0.15, 0), F, 26, k ? [255,140,110] : [140,200,255], 0);
+      } }],
+
+    ['Orbiting moons', function (g, t) {
+      var m = geo('sph5', function(){ return gSphere(8, 12, 0.55); });
+      solid(g, xform(m.V, 0.3, t*0.001, 0), m.F, 34, [255,200,90], 0);
+      var i;
+      for (i = 0; i < 3; i++) {
+        var a = t * (0.0016 + i * 0.0007) + i * 2.1, r = 1.3 + i * 0.5;
+        var V = [], k;
+        for (k = 0; k < m.V.length; k++)
+          V.push([m.V[k][0]*0.45 + Math.cos(a)*r, m.V[k][1]*0.45 + Math.sin(a*0.7)*0.5, m.V[k][2]*0.45 + Math.sin(a)*r]);
+        solid(g, xform(V, 0.3, 0, 0), m.F, 34, i===0?[150,220,255]:i===1?[255,150,190]:[170,255,180], 0);
+      } }],
+
+    ['Spinning coin', function (g, t) { var m = geo('coin', function(){ return gTube(1, 20, 1.4, 1.4, 0.22); });
+      solid(g, xform(m.V, Math.PI/2 + Math.sin(t*0.0016)*0.9, t*0.006, 0), m.F, 32, [240,215,120], 0); }],
+
+    ['Pyramid stack', function (g, t) {
+      var m = geo('pys', function () {
+        var V = [], F = [], i, n = 4;
+        for (i = 0; i < n; i++) {
+          var s = 1.3 - i * 0.28, y = 1.2 - i * 0.72, b = V.length;
+          V.push([-s, y, -s]); V.push([s, y, -s]); V.push([s, y, s]); V.push([-s, y, s]);
+          V.push([0, y - 0.62, 0]);
+          F.push([b,b+1,b+4]); F.push([b+1,b+2,b+4]); F.push([b+2,b+3,b+4]); F.push([b+3,b,b+4]);
+          F.push([b,b+3,b+2,b+1]);
+        }
+        return { V: V, F: F };
+      });
+      solid(g, xform(m.V, 0.28, t*0.0015, 0), m.F, 26, [255,160,120], 1); }],
+
+    ['Cross polycube', function (g, t) {
+      var m = geo('crs', function () {
+        return manyCubes([[0,0,0],[1.05,0,0],[-1.05,0,0],[0,1.05,0],[0,-1.05,0],[0,0,1.05],[0,0,-1.05]], 0.5);
+      });
+      solid(g, xform(m.V, t*0.0011, t*0.0015, t*0.0006), m.F, 28, [170,255,200], 1); }],
+
+    ['Lattice cube', function (g, t) {
+      var m = geo('lat', function () {
+        var V = [], E = [], i, j, n = 3;
+        for (i = 0; i <= n; i++) for (j = 0; j <= n; j++) {
+          var a = (i / n * 2 - 1) * 1.4, b = (j / n * 2 - 1) * 1.4;
+          var s = V.length;
+          V.push([a, b, -1.4]); V.push([a, b, 1.4]);
+          V.push([a, -1.4, b]); V.push([a, 1.4, b]);
+          V.push([-1.4, a, b]); V.push([1.4, a, b]);
+          E.push([s, s+1]); E.push([s+2, s+3]); E.push([s+4, s+5]);
+        }
+        return { V: V, E: E };
+      });
+      wire(g, xform(m.V, t*0.0008, t*0.0012, 0), m.E, 28, '190,190,255', 1.2); }],
+
+    ['Kaleido polyhedron', function (g, t) {
+      var m = geo('ico', gIcosa), i;
+      for (i = 0; i < 4; i++) {
+        var sx = (i & 1) ? -1 : 1, sy = (i & 2) ? -1 : 1;
+        var V = m.V.map(function (p) { return [p[0]*sx*0.62 + sx*0.85, p[1]*sy*0.62 + sy*0.62, p[2]*0.62]; });
+        solid(g, xform(V, t*0.0012*sx, t*0.0016*sy, 0), m.F, 26,
+              i===0?[255,120,160]:i===1?[120,220,255]:i===2?[255,220,120]:[160,255,170], 0);
+      } }],
+
+    ['Ringed planet', function (g, t) {
+      var m = geo('sph6', function(){ return gSphere(10, 16, 1.0); });
+      var tilt = 0.42;
+      solid(g, xform(m.V, tilt, t*0.0013, 0), m.F, 32, [220,180,120], 0);
+      var i, k;
+      for (k = 0; k < 3; k++) {
+        var V = [], E = [], n = 46, rr = 1.6 + k * 0.32;
+        for (i = 0; i < n; i++) {
+          var a = i / n * TAU;
+          V.push([Math.cos(a) * rr, 0, Math.sin(a) * rr]);
+          E.push([i, (i + 1) % n]);
+        }
+        wire(g, xform(V, tilt, t*0.0006, 0), E, 32, '255,225,170', 1.6);
+      } }]
+  ];
+
+
   /* ================================================================ */
 
   var CHANNELS = [
@@ -2713,6 +3433,14 @@
         }
       });
     }(fi));
+  }
+
+  /* Registered after the CHANNELS array is assigned: `var` hoists the
+     declaration but not the value, so pushing any earlier throws. */
+  for (var gi = 0; gi < G3.length; gi++) {
+    (function (i) {
+      CHANNELS.push({ name: G3[i][0], draw: G3[i][1] });
+    }(gi));
   }
 
   var current = 0;
