@@ -3619,9 +3619,15 @@
     var LOOKAHEAD = 0.04, TICK = 12, MASTER_VOL = 0.22;
     var live = [];                                  /* sounding nodes */
 
+    /* Minor modes only. Mixolydian and lydian were the two bright
+       ones and they were pulling tracks major. */
     var SCALES = [
-      [0, 2, 3, 5, 7, 8, 10], [0, 2, 3, 5, 7, 9, 10], [0, 1, 3, 5, 7, 8, 10],
-      [0, 2, 3, 5, 7, 8, 11], [0, 2, 4, 5, 7, 9, 10], [0, 2, 4, 6, 7, 9, 11]
+      [0, 2, 3, 5, 7, 8, 10],   /* aeolian */
+      [0, 2, 3, 5, 7, 9, 10],   /* dorian */
+      [0, 1, 3, 5, 7, 8, 10],   /* phrygian */
+      [0, 2, 3, 5, 7, 8, 11],   /* harmonic minor */
+      [0, 2, 3, 5, 6, 8, 10],   /* locrian-ish, darker still */
+      [0, 1, 3, 5, 7, 8, 11]    /* double harmonic flavour */
     ];
 
     /* All under 92bpm; the busier styles subdivide instead. */
@@ -3711,13 +3717,13 @@
       return {
         st: st,
         bpm: st.bpm[0] + ((r() * (st.bpm[1] - st.bpm[0] + 1)) | 0),
-        root: 45 + ((r() * 12) | 0),
+        root: 40 + ((r() * 10) | 0),
         scale: SCALES[(r() * SCALES.length) | 0],
         prog: st.vamp ? [0, 0, 5, 5] : PROGS[(r() * PROGS.length) | 0],
         kit: KITS[(r() * KITS.length) | 0],
         bassOn: BASSF[st.feel],
-        duty: [0.5, 0.25, 0.125][(r() * 3) | 0],
-        leadDuty: [0.5, 0.25, 0.125][(r() * 3) | 0],
+        duty: [0.5, 0.25][(r() * 2) | 0],
+        leadDuty: [0.5, 0.25][(r() * 2) | 0],
         cutoff: 600 + r() * 2400,
         sweep: r() < 0.5 ? 0 : 900 + r() * 1800,
         arpUp: r() < 0.62,
@@ -3739,6 +3745,15 @@
     }
 
     function freq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+    /* Octave-fold rather than clamp, so a line keeps its shape instead
+       of flattening against a ceiling. Ranges are deliberately low —
+       nothing reaches the piercing register. */
+    function fold(m, lo, hi) {
+      while (m > hi) m -= 12;
+      while (m < lo) m += 12;
+      return m;
+    }
 
     function chord(t, degIdx, oct) {
       var out = [], sc = t.scale, i;
@@ -3767,8 +3782,11 @@
       live = [];
     }
 
-    function voice(time, f, dur, kind, duty, gain, dest, vib) {
-      var o = ctx.createOscillator(), g = ctx.createGain();
+    function voice(time, f, dur, kind, duty, gain, dest, vib, tone) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = tone || 1800;          /* take the glare off */
+      lp.Q.value = 0.7;
       if (kind === 'tri') o.type = 'triangle'; else o.setPeriodicWave(pulseWave(duty));
       o.frequency.setValueAtTime(f, time);
       if (vib) {
@@ -3781,7 +3799,7 @@
       g.gain.linearRampToValueAtTime(gain, time + 0.008);
       g.gain.setValueAtTime(gain, time + dur * 0.55);
       g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-      o.connect(g); g.connect(dest);
+      o.connect(lp); lp.connect(g); g.connect(dest);
       o.start(time); o.stop(time + dur + 0.03); hold(o, time + dur + 0.03);
     }
 
@@ -3871,15 +3889,15 @@
       var arpRate = (sect === 1 || sect === 3) && st.arp > 1 ? st.arp / 2 : st.arp;
 
       if (t.bassOn(k)) {
-        var bn = ch[0] + 12 * st.bassOct;
+        var bn = fold(ch[0] + 12 * st.bassOct, 28, 45);
         if (t.octJump && k % 8 === 6) bn += 12;
         bass(time, freq(bn), sixteenth * (st.feel === 2 ? 3.2 : 1.7), t);
       }
 
       if (k % arpRate === 0) {
         var ai = ((k / arpRate) | 0) % t.arpSpan;
-        var an = ch[(t.arpUp ? ai : t.arpSpan - 1 - ai) % 4] + 12;
-        voice(time, freq(an), sixteenth * 1.3, 'pulse', t.duty, 0.05, master, 0);
+        var an = fold(ch[(t.arpUp ? ai : t.arpSpan - 1 - ai) % 4], 43, 60);
+        voice(time, freq(an), sixteenth * 1.3, 'pulse', t.duty, 0.05, master, 0, 1400);
       }
 
       /* the tune: every sixteenth is available, held to the next onset,
@@ -3889,16 +3907,16 @@
       if (d >= 0) {
         var dd = (k % 8 === 0) ? snap(d, degIdx) : d;
         var oct = Math.floor(dd / 7);
-        var ln = t.root + t.scale[((dd % 7) + 7) % 7] + 12 * (st.leadOct + oct);
+        var ln = fold(t.root + t.scale[((dd % 7) + 7) % 7] + 12 * (st.leadOct + oct), 55, 71);
         voice(time, freq(ln), sixteenth * t.mel.d[mi] * 0.92, st.lead, t.leadDuty,
-              0.135, t.delayOn ? delayNode : master, st.vib || 0);
+              0.135, t.delayOn ? delayNode : master, st.vib || 0, 1900);
       }
 
       if (wantDrums) {
         if (has(t.kit.kick, k)) kick(time);
-        if (has(t.kit.snare, k)) noise(time, 0.14, 'bandpass', 1900, 0.28, 1.2);
-        if (t.kit.ghost && (k === 7 || k === 15)) noise(time, 0.05, 'bandpass', 2400, 0.09, 1.2);
-        if (st.hats && k % st.hats === 0) noise(time, 0.035, 'highpass', 7200, 0.08);
+        if (has(t.kit.snare, k)) noise(time, 0.15, 'bandpass', 1350, 0.24, 1.1);
+        if (t.kit.ghost && (k === 7 || k === 15)) noise(time, 0.05, 'bandpass', 1700, 0.07, 1.2);
+        if (st.hats && k % st.hats === 0) noise(time, 0.03, 'highpass', 6000, 0.045);
       }
     }
 
@@ -3946,7 +3964,7 @@
           delayNode.delayTime.setValueAtTime(track.delayTime, at);
           if (wasOn) {
             restore(at, track.delayTime);
-            noise(at, 0.14, 'highpass', 1200, 0.18);
+            noise(at, 0.14, 'highpass', 900, 0.16);
           }
           nextTime = at + 0.01;
         }
