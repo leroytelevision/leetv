@@ -3615,7 +3615,7 @@
     var ctx = null, master = null, delayNode = null, delayFb = null, delayWet = null, comp = null;
     var noiseBuf = null, waves = {};
     var timer = null, enabled = false;
-    var track = null, nextTime = 0, step = 0;
+    var track = null, nextTime = 0, step = 0, rung = 0;
     var LOOKAHEAD = 0.04, TICK = 12, MASTER_VOL = 0.22;
     var live = [];                                  /* sounding nodes */
 
@@ -3964,7 +3964,21 @@
           delayNode.delayTime.setValueAtTime(track.delayTime, at);
           if (wasOn) {
             restore(at, track.delayTime);
-            noise(at, 0.14, 'highpass', 900, 0.16);
+            noise(at, 0.09, 'highpass', 900, 0.10);
+            /* Each click steps one rung up the new channel's scale and
+               wraps at the octave, so clicking through the channels
+               walks up a run. The mode belongs to the channel you land
+               on, so the colour of the run changes as you go. Folded
+               into a low register like everything else. */
+            /* Fixed base: deriving it from the new channel's root made
+               the pitch jump around per channel and buried the run. With
+               it held constant the run always climbs, while the mode of
+               the channel you land on still colours the intervals. */
+            var base = 55;
+            var deg = rung % track.scale.length;
+            voice(at + 0.012, freq(base + track.scale[deg]), 0.5, 'pulse',
+                  0.25, 0.15, delayNode, 0, 2400);
+            rung = (rung + 1) % track.scale.length;
           }
           nextTime = at + 0.01;
         }
