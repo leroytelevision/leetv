@@ -2672,6 +2672,91 @@
     return { V: V, F: F };
   }
 
+  /* --- composing solids out of parts ------------------------------
+     boxGeo/merge let a scene be built from primitives, and solidM
+     takes a colour per face so a whole object still goes through one
+     depth sort — drawing parts separately would let them overlap
+     wrongly. ---------------------------------------------------- */
+
+  function boxGeo(x, y, z, w, h, d) {
+    var V = [], sx, sy, sz, i;
+    for (sx = -1; sx <= 1; sx += 2) for (sy = -1; sy <= 1; sy += 2) for (sz = -1; sz <= 1; sz += 2)
+      V.push([x + sx * w, y + sy * h, z + sz * d]);
+    var F = [];
+    for (i = 0; i < CUBE_F.length; i++) F.push(CUBE_F[i].slice());
+    return { V: V, F: F };
+  }
+
+  function cylGeo(x, y, z, rTop, rBot, h, seg, axis) {
+    var m = gTube(1, seg || 10, rTop, rBot, h), V = [], i;
+    for (i = 0; i < m.V.length; i++) {
+      var p = m.V[i];
+      if (axis === 'x') V.push([x + p[1], y + p[0], z + p[2]]);
+      else if (axis === 'z') V.push([x + p[0], y + p[2], z + p[1]]);
+      else V.push([x + p[0], y + p[1], z + p[2]]);
+    }
+    return { V: V, F: m.F };
+  }
+
+  function sphGeo(x, y, z, r, nu, nv) {
+    var m = gSphere(nu || 7, nv || 10, r), V = [], i;
+    for (i = 0; i < m.V.length; i++) V.push([x + m.V[i][0], y + m.V[i][1], z + m.V[i][2]]);
+    return { V: V, F: m.F };
+  }
+
+  function part(geo, rgb) { return { V: geo.V, F: geo.F, c: rgb }; }
+
+  function mergeC(parts) {
+    var V = [], F = [], C = [], i, k;
+    for (i = 0; i < parts.length; i++) {
+      var base = V.length, p = parts[i];
+      for (k = 0; k < p.V.length; k++) V.push(p.V[k]);
+      for (k = 0; k < p.F.length; k++) {
+        var f = p.F[k], nf = [], j;
+        for (j = 0; j < f.length; j++) nf.push(f[j] + base);
+        F.push(nf); C.push(p.c);
+      }
+    }
+    return { V: V, F: F, C: C };
+  }
+
+  function solidM(g, R, F, C, sc, edge) {
+    var i, k, order = [];
+    for (i = 0; i < F.length; i++) {
+      var f = F[i], z = 0;
+      for (k = 0; k < f.length; k++) z += R[f[k]][2];
+      order.push([i, z / f.length]);
+    }
+    order.sort(function (a, b) { return b[1] - a[1]; });
+    for (i = 0; i < order.length; i++) {
+      var idx = order[i][0], fc = F[idx], rgb = C[idx];
+      var a = R[fc[0]], b = R[fc[1]], c = R[fc[2]];
+      var ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      var vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      var cxm = 0, cym = 0, czm = 0;
+      for (k = 0; k < fc.length; k++) { cxm += R[fc[k]][0]; cym += R[fc[k]][1]; czm += R[fc[k]][2]; }
+      if (nx * cxm + ny * cym + nz * czm < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      var sh = (nx * -0.42 + ny * -0.56 + nz * -0.72) / len;
+      sh = 0.24 + Math.max(0, sh) * 0.9;
+      g.fillStyle = 'rgb(' + ((rgb[0] * sh) | 0) + ',' + ((rgb[1] * sh) | 0) + ',' + ((rgb[2] * sh) | 0) + ')';
+      g.beginPath();
+      for (k = 0; k < fc.length; k++) {
+        var s = pxy(R[fc[k]], sc);
+        if (k) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]);
+      }
+      g.closePath();
+      g.fill();
+      if (edge) { g.strokeStyle = 'rgba(255,255,255,0.20)'; g.lineWidth = 0.7; g.stroke(); }
+    }
+  }
+
+  /* draw a composed object with one rotation */
+  function obj(g, m, rx, ry, rz, sc, edge) {
+    solidM(g, xform(m.V, rx, ry, rz), m.F, m.C, sc, edge);
+  }
+
   var G3 = [
     ['Tetrahedron', function (g, t) { var m = geo('tet', gTetra);
       solid(g, xform(m.V, t*0.0011, t*0.0017, 0), m.F, 32, [255,118,86], 1); }],
@@ -5317,6 +5402,1347 @@
         g.fillRect(0, 20 + i * 22 + Math.sin(t * 0.002 + i) * 3, W, 3); } }]
   ];
 
+  /* 100 more scenes through the 3D engine — objects and places, not
+     only solids. Names checked against every other channel. */
+  var G3B = [
+    ['House', function (g, t) {
+      var m = geo('house', function () { return mergeC([
+        part(boxGeo(0, 0.4, 0, 1.5, 0.9, 1.1), [216, 200, 172]),
+        part(boxGeo(0, -0.65, 0, 1.65, 0.12, 1.25), [140, 120, 96]),
+        part(boxGeo(0.9, 1.6, 0, 0.22, 0.55, 0.22), [170, 90, 70]),
+        part(boxGeo(0, 1.35, 0, 1.62, 0.1, 1.2), [176, 84, 62]),
+        part(boxGeo(0, 1.0, 0, 1.2, 0.5, 0.85), [196, 96, 72]),
+        part(boxGeo(0, -0.1, 1.12, 0.3, 0.5, 0.02), [110, 78, 52]),
+        part(boxGeo(-0.75, 0.5, 1.12, 0.28, 0.28, 0.02), [140, 200, 230]),
+        part(boxGeo(0.75, 0.5, 1.12, 0.28, 0.28, 0.02), [140, 200, 230])
+      ]); });
+      obj(g, m, 0.24, t * 0.0009, 0, 30, 1); }],
+
+    ['Castle', function (g, t) {
+      var m = geo('castle', function () {
+        var ps = [part(boxGeo(0, -0.2, 0, 1.6, 0.7, 0.5), [178, 176, 168])], i;
+        for (i = 0; i < 2; i++) {
+          var x = i ? 1.5 : -1.5;
+          ps.push(part(cylGeo(x, 0.1, 0, 0.42, 0.46, 1.8, 8), [190, 188, 180]));
+          ps.push(part(boxGeo(x, 1.15, 0, 0.5, 0.12, 0.5), [150, 148, 142]));
+          ps.push(part(cylGeo(x, 1.6, 0, 0.02, 0.5, 0.7, 8), [150, 70, 60]));
+        }
+        for (i = 0; i < 5; i++) ps.push(part(boxGeo(-0.9 + i * 0.45, 0.62, 0, 0.16, 0.18, 0.5), [178, 176, 168]));
+        ps.push(part(boxGeo(0, -0.45, 0.52, 0.28, 0.45, 0.02), [80, 56, 40]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.2, t * 0.0008, 0, 27, 1); }],
+
+    ['Obelisk', function (g, t) {
+      var m = geo('obel', function () { return mergeC([
+        part(boxGeo(0, -1.5, 0, 0.9, 0.16, 0.9), [190, 180, 150]),
+        part(boxGeo(0, -1.2, 0, 0.7, 0.14, 0.7), [204, 194, 162]),
+        part(cylGeo(0, 0.15, 0, 0.28, 0.44, 2.5, 4), [222, 206, 160]),
+        part(cylGeo(0, 1.6, 0, 0.01, 0.28, 0.5, 4), [240, 214, 120])
+      ]); });
+      obj(g, m, 0.16, t * 0.0013, 0, 27, 1); }],
+
+    ['Water wheel', function (g, t) {
+      var i, ps = [part(boxGeo(-1.6, -0.4, 0, 0.5, 1.1, 0.5), [120, 88, 56])];
+      for (i = 0; i < 10; i++) {
+        var a = i * TAU / 10 + t * 0.0016;
+        ps.push(part(boxGeo(Math.cos(a) * 1.15, Math.sin(a) * 1.15, 0, 0.34, 0.1, 0.5), [150, 108, 66]));
+      }
+      ps.push(part(cylGeo(0, 0, 0, 0.16, 0.16, 1.2, 8, 'z'), [96, 70, 46]));
+      obj(g, mergeC(ps), 0.14, 0.35, 0, 27, 1);
+      var m2 = mergeC([part(boxGeo(0, -1.5, 0, 2.2, 0.14, 0.9), [60, 130, 170])]);
+      obj(g, m2, 0.14, 0.35, 0, 27, 0); }],
+
+    ['Space capsule', function (g, t) {
+      var m = geo('caps', function () { return mergeC([
+        part(cylGeo(0, 0, 0, 0.55, 1.0, 1.5, 12), [200, 202, 208]),
+        part(cylGeo(0, -0.86, 0, 1.0, 0.9, 0.22, 12), [120, 96, 70]),
+        part(sphGeo(0, 0.85, 0, 0.5, 6, 10), [130, 190, 220]),
+        part(boxGeo(1.5, 0.1, 0, 0.9, 0.06, 0.5), [40, 70, 150]),
+        part(boxGeo(-1.5, 0.1, 0, 0.9, 0.06, 0.5), [40, 70, 150])
+      ]); });
+      obj(g, m, Math.sin(t * 0.0009) * 0.3, t * 0.0012, Math.sin(t * 0.0007) * 0.2, 28, 1); }],
+
+    ['Car', function (g, t) {
+      var m = geo('car', function () {
+        var ps = [
+          part(boxGeo(0, -0.1, 0, 1.6, 0.34, 0.7), [200, 60, 52]),
+          part(boxGeo(-0.1, 0.42, 0, 0.85, 0.32, 0.62), [180, 48, 42]),
+          part(boxGeo(-0.1, 0.42, 0.63, 0.7, 0.22, 0.02), [140, 200, 230]),
+          part(boxGeo(1.55, -0.05, 0, 0.08, 0.14, 0.5), [240, 235, 200])
+        ], i;
+        for (i = 0; i < 4; i++) ps.push(part(cylGeo((i < 2 ? 1 : -1) * 1.0, -0.42,
+          (i % 2 ? 1 : -1) * 0.72, 0.32, 0.32, 0.2, 9, 'z'), [40, 40, 46]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.22, t * 0.0013, 0, 28, 1); }],
+
+    ['Delivery truck', function (g, t) {
+      var m = geo('truck', function () {
+        var ps = [
+          part(boxGeo(-0.45, 0.25, 0, 1.15, 0.75, 0.75), [235, 230, 220]),
+          part(boxGeo(0.95, -0.05, 0, 0.62, 0.45, 0.7), [60, 110, 190]),
+          part(boxGeo(1.2, 0.2, 0.5, 0.3, 0.2, 0.22), [150, 205, 230]),
+          part(boxGeo(0, -0.5, 0, 1.75, 0.12, 0.7), [50, 50, 58])
+        ], i;
+        for (i = 0; i < 4; i++) ps.push(part(cylGeo((i < 2 ? 1.0 : -0.85), -0.62,
+          (i % 2 ? 1 : -1) * 0.74, 0.3, 0.3, 0.18, 9, 'z'), [36, 36, 42]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.2, t * 0.0011, 0, 26, 1); }],
+
+    ['Monorail', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 3; i++) {
+        var z = ((t * 0.0016 + i * 0.7) % 3) - 1.5;
+        ps.push(part(boxGeo(0, 0.15, z * 2.2, 0.5, 0.4, 0.95), [225, 225, 232]));
+        ps.push(part(boxGeo(0, 0.3, z * 2.2 + 0.5, 0.42, 0.2, 0.45), [90, 180, 220]));
+      }
+      ps.push(part(boxGeo(0, -0.45, 0, 0.22, 0.22, 4.2), [140, 140, 150]));
+      obj(g, mergeC(ps), 0.3, 0.6 + Math.sin(t * 0.0005) * 0.15, 0, 26, 1); }],
+
+    ['Tugboat', function (g, t) {
+      var m = geo('boat', function () { return mergeC([
+        part(boxGeo(0, -0.35, 0, 1.5, 0.35, 0.7), [190, 60, 55]),
+        part(boxGeo(0, -0.05, 0, 1.35, 0.3, 0.62), [235, 230, 220]),
+        part(boxGeo(-0.3, 0.42, 0, 0.55, 0.42, 0.5), [235, 230, 220]),
+        part(cylGeo(0.45, 0.55, 0, 0.16, 0.2, 0.8, 8), [40, 44, 52]),
+        part(boxGeo(-0.3, 0.5, 0.52, 0.4, 0.2, 0.02), [140, 200, 230])
+      ]); });
+      var rk = Math.sin(t * 0.0026) * 0.14;
+      obj(g, m, 0.2 + rk, t * 0.001, rk * 0.5, 28, 1); }],
+
+    ['Airliner', function (g, t) {
+      var m = geo('plane', function () { return mergeC([
+        part(cylGeo(0, 0, 0, 0.34, 0.3, 3.2, 10, 'x'), [238, 238, 244]),
+        part(boxGeo(0, 0, 0, 0.5, 0.05, 2.2), [220, 220, 228]),
+        part(boxGeo(-1.3, 0, 0, 0.25, 0.04, 0.9), [220, 220, 228]),
+        part(boxGeo(-1.45, 0.35, 0, 0.2, 0.35, 0.05), [200, 60, 60]),
+        part(cylGeo(0.1, -0.2, 0.95, 0.16, 0.16, 0.5, 8, 'x'), [120, 130, 150]),
+        part(cylGeo(0.1, -0.2, -0.95, 0.16, 0.16, 0.5, 8, 'x'), [120, 130, 150])
+      ]); });
+      obj(g, m, Math.sin(t * 0.0008) * 0.2, t * 0.0011, Math.sin(t * 0.0012) * 0.25, 26, 1); }],
+
+    ['Armchair', function (g, t) {
+      var m = geo('chair', function () { return mergeC([
+        part(boxGeo(0, -0.15, 0, 0.9, 0.2, 0.85), [180, 70, 90]),
+        part(boxGeo(0, 0.55, -0.75, 0.9, 0.7, 0.14), [200, 84, 104]),
+        part(boxGeo(-1.0, 0.2, 0, 0.14, 0.4, 0.85), [190, 78, 96]),
+        part(boxGeo(1.0, 0.2, 0, 0.14, 0.4, 0.85), [190, 78, 96]),
+        part(boxGeo(-0.75, -0.65, 0.6, 0.1, 0.35, 0.1), [90, 62, 40]),
+        part(boxGeo(0.75, -0.65, 0.6, 0.1, 0.35, 0.1), [90, 62, 40]),
+        part(boxGeo(-0.75, -0.65, -0.6, 0.1, 0.35, 0.1), [90, 62, 40]),
+        part(boxGeo(0.75, -0.65, -0.6, 0.1, 0.35, 0.1), [90, 62, 40])
+      ]); });
+      obj(g, m, 0.28, t * 0.0011, 0, 30, 1); }],
+
+    ['Desk lamp', function (g, t) {
+      var m = geo('lamp', function () { return mergeC([
+        part(cylGeo(0, -1.2, 0, 0.75, 0.8, 0.18, 12), [70, 74, 84]),
+        part(cylGeo(-0.2, -0.4, 0, 0.09, 0.09, 1.5, 8), [110, 116, 128]),
+        part(cylGeo(0.55, 0.5, 0, 0.09, 0.09, 1.3, 8), [110, 116, 128]),
+        part(cylGeo(0.95, 1.15, 0, 0.55, 0.22, 0.6, 12), [240, 200, 90])
+      ]); });
+      obj(g, m, 0.18, t * 0.0012, 0, 27, 1); }],
+
+    ['Bookshelf', function (g, t) {
+      var m = geo('shelf', function () {
+        var ps = [
+          part(boxGeo(-1.15, 0, 0, 0.1, 1.5, 0.45), [130, 92, 58]),
+          part(boxGeo(1.15, 0, 0, 0.1, 1.5, 0.45), [130, 92, 58])
+        ], i, k;
+        for (i = 0; i < 4; i++) ps.push(part(boxGeo(0, -1.1 + i * 0.72, 0, 1.15, 0.07, 0.45), [150, 108, 68]));
+        var cols = [[200, 70, 60], [70, 130, 190], [230, 190, 80], [90, 170, 110], [170, 100, 190]];
+        for (i = 0; i < 3; i++) for (k = 0; k < 7; k++)
+          ps.push(part(boxGeo(-0.95 + k * 0.3, -0.75 + i * 0.72, 0, 0.11, 0.28, 0.34),
+                       cols[(i * 7 + k) % 5]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.2, 0.5 + Math.sin(t * 0.0007) * 0.4, 0, 27, 1); }],
+
+    ["Rubik's cube", function (g, t) {
+      var m = geo('rubik', function () {
+        var ps = [], x, y, z;
+        var cols = [[220, 60, 50], [240, 240, 240], [40, 110, 200], [240, 180, 40], [60, 170, 90], [250, 130, 40]];
+        for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) {
+          ps.push(part(boxGeo(x * 0.7, y * 0.7, z * 0.7, 0.32, 0.32, 0.32),
+                       cols[(x + y * 2 + z * 3 + 9) % 6]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, t * 0.0011, t * 0.0016, 0, 26, 1); }],
+
+    ['Robot', function (g, t) {
+      var sw = Math.sin(t * 0.004);
+      var ps = [
+        part(boxGeo(0, 0.15, 0, 0.6, 0.75, 0.4), [150, 156, 170]),
+        part(boxGeo(0, 1.25, 0, 0.45, 0.4, 0.4), [180, 186, 200]),
+        part(boxGeo(-0.18, 1.3, 0.42, 0.12, 0.1, 0.02), [90, 240, 200]),
+        part(boxGeo(0.18, 1.3, 0.42, 0.12, 0.1, 0.02), [90, 240, 200]),
+        part(cylGeo(0, 1.75, 0, 0.05, 0.05, 0.4, 6), [120, 126, 140]),
+        part(sphGeo(0, 2.0, 0, 0.12, 5, 8), [240, 90, 80]),
+        part(boxGeo(-0.85, 0.3 + sw * 0.2, 0, 0.18, 0.55, 0.18), [160, 166, 180]),
+        part(boxGeo(0.85, 0.3 - sw * 0.2, 0, 0.18, 0.55, 0.18), [160, 166, 180]),
+        part(boxGeo(-0.3, -0.95, 0, 0.2, 0.5, 0.2), [120, 126, 140]),
+        part(boxGeo(0.3, -0.95, 0, 0.2, 0.5, 0.2), [120, 126, 140])
+      ];
+      obj(g, mergeC(ps), 0.16, t * 0.0013, 0, 26, 1); }],
+
+    ['Diamond', function (g, t) {
+      var m = geo('gem', function () {
+        var V = [[0, -1.5, 0]], F = [], i, n = 10;
+        for (i = 0; i < n; i++) { var a = i * TAU / n;
+          V.push([Math.cos(a) * 1.1, 0.1, Math.sin(a) * 1.1]); }
+        for (i = 0; i < n; i++) { var a2 = i * TAU / n + TAU / n / 2;
+          V.push([Math.cos(a2) * 0.72, 0.85, Math.sin(a2) * 0.72]); }
+        V.push([0, 0.95, 0]);
+        for (i = 0; i < n; i++) F.push([0, 1 + i, 1 + (i + 1) % n]);
+        for (i = 0; i < n; i++) { F.push([1 + i, 1 + n + i, 1 + (i + 1) % n]);
+          F.push([1 + (i + 1) % n, 1 + n + i, 1 + n + (i + 1) % n]); }
+        for (i = 0; i < n; i++) F.push([1 + n + i, 1 + 2 * n, 1 + n + (i + 1) % n]);
+        var C = []; for (i = 0; i < F.length; i++) C.push([120 + (i * 37) % 100, 210, 245]);
+        return { V: V, F: F, C: C };
+      });
+      obj(g, m, 0.1, t * 0.0018, 0, 32, 1); }],
+
+    ['Crown', function (g, t) {
+      var m = geo('crown', function () {
+        var ps = [part(cylGeo(0, -0.5, 0, 1.0, 1.0, 0.5, 12), [235, 195, 70])], i;
+        for (i = 0; i < 8; i++) { var a = i * TAU / 8;
+          ps.push(part(cylGeo(Math.cos(a) * 1.0, 0.15, Math.sin(a) * 1.0, 0.02, 0.16, 0.85, 4), [240, 205, 80]));
+          ps.push(part(sphGeo(Math.cos(a) * 1.0, 0.62, Math.sin(a) * 1.0, 0.14, 5, 7),
+                       i % 2 ? [220, 60, 70] : [70, 150, 220])); }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.28, t * 0.0014, 0, 30, 1); }],
+
+    ['Chess king', function (g, t) {
+      var m = geo('king', function () { return mergeC([
+        part(cylGeo(0, -1.35, 0, 0.62, 0.75, 0.25, 12), [235, 230, 218]),
+        part(cylGeo(0, -0.55, 0, 0.26, 0.5, 1.35, 12), [242, 238, 226]),
+        part(cylGeo(0, 0.35, 0, 0.5, 0.28, 0.4, 12), [235, 230, 218]),
+        part(sphGeo(0, 0.85, 0, 0.4, 6, 10), [242, 238, 226]),
+        part(boxGeo(0, 1.4, 0, 0.09, 0.3, 0.09), [220, 200, 140]),
+        part(boxGeo(0, 1.4, 0, 0.24, 0.09, 0.09), [220, 200, 140])
+      ]); });
+      obj(g, m, 0.14, t * 0.0013, 0, 28, 1); }],
+
+    ['Chess knight', function (g, t) {
+      var m = geo('knight', function () { return mergeC([
+        part(cylGeo(0, -1.3, 0, 0.6, 0.72, 0.28, 12), [60, 58, 62]),
+        part(cylGeo(0, -0.75, 0, 0.35, 0.5, 0.85, 12), [70, 68, 72]),
+        part(boxGeo(0, -0.1, 0.05, 0.34, 0.5, 0.5), [80, 78, 84]),
+        part(boxGeo(0.15, 0.5, 0.25, 0.3, 0.32, 0.55), [86, 84, 90]),
+        part(boxGeo(0.3, 0.6, 0.6, 0.22, 0.2, 0.25), [86, 84, 90]),
+        part(boxGeo(-0.05, 0.95, -0.1, 0.1, 0.28, 0.14), [60, 58, 62])
+      ]); });
+      obj(g, m, 0.14, t * 0.0012, 0, 28, 1); }],
+
+    ['Barrel', function (g, t) {
+      var m = geo('barrel', function () { return mergeC([
+        part(cylGeo(0, 0, 0, 0.85, 0.85, 2.0, 12), [150, 100, 58]),
+        part(cylGeo(0, 0.6, 0, 0.92, 0.92, 0.18, 12), [90, 92, 100]),
+        part(cylGeo(0, -0.6, 0, 0.92, 0.92, 0.18, 12), [90, 92, 100]),
+        part(cylGeo(0, 1.0, 0, 0.8, 0.8, 0.08, 12), [120, 80, 46])
+      ]); });
+      obj(g, m, 0.3, t * 0.0014, 0, 30, 1); }],
+
+    ['Crate stack', function (g, t) {
+      var m = geo('crates', function () {
+        var ps = [], spec = [[-0.7, -1.0, 0], [0.7, -1.0, 0], [0, 0, 0], [-0.6, 1.0, 0.2]], i;
+        for (i = 0; i < 4; i++) {
+          ps.push(part(boxGeo(spec[i][0], spec[i][1], spec[i][2], 0.62, 0.5, 0.62), [176, 130, 74]));
+          ps.push(part(boxGeo(spec[i][0], spec[i][1], spec[i][2] + 0.63, 0.62, 0.08, 0.02), [130, 92, 48]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.22, t * 0.001, 0, 27, 1); }],
+
+    ['Colonnade', function (g, t) {
+      var m = geo('cols', function () {
+        var ps = [part(boxGeo(0, -1.35, 0, 2.4, 0.14, 0.8), [214, 208, 190]),
+                  part(boxGeo(0, 1.25, 0, 2.4, 0.16, 0.8), [214, 208, 190])], i;
+        for (i = 0; i < 5; i++) {
+          var x = -1.8 + i * 0.9;
+          ps.push(part(cylGeo(x, 0, 0, 0.26, 0.3, 2.4, 10), [232, 226, 208]));
+          ps.push(part(cylGeo(x, 1.1, 0, 0.4, 0.34, 0.16, 10), [214, 208, 190]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.16, t * 0.0007, 0, 24, 1); }],
+
+    ['Stone arch', function (g, t) {
+      var m = geo('arch', function () {
+        var ps = [], i, n = 11;
+        for (i = 0; i < n; i++) {
+          var a = Math.PI * (i / (n - 1));
+          ps.push(part(boxGeo(-Math.cos(a) * 1.3, Math.sin(a) * 1.3 - 0.2, 0, 0.26, 0.3, 0.5),
+                       [190 + (i % 3) * 12, 182, 164]));
+        }
+        ps.push(part(boxGeo(0, -1.35, 0, 1.9, 0.16, 0.6), [160, 152, 138]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.18, t * 0.001, 0, 30, 1); }],
+
+    ['Carousel', function (g, t) {
+      var i, ps = [
+        part(cylGeo(0, 1.15, 0, 0.1, 1.7, 0.5, 12), [210, 70, 80]),
+        part(cylGeo(0, -1.2, 0, 1.7, 1.7, 0.16, 12), [230, 220, 200]),
+        part(cylGeo(0, 0, 0, 0.12, 0.12, 2.4, 8), [180, 150, 90])
+      ];
+      for (i = 0; i < 6; i++) {
+        var a = i * TAU / 6 + t * 0.0016;
+        var y = -0.5 + Math.sin(t * 0.005 + i) * 0.25;
+        ps.push(part(boxGeo(Math.cos(a) * 1.25, y, Math.sin(a) * 1.25, 0.28, 0.2, 0.14),
+                     i % 2 ? [240, 230, 220] : [190, 130, 90]));
+        ps.push(part(cylGeo(Math.cos(a) * 1.25, y + 0.75, Math.sin(a) * 1.25, 0.04, 0.04, 1.5, 6), [200, 180, 120]));
+      }
+      obj(g, mergeC(ps), 0.26, 0.3, 0, 26, 1); }],
+
+    ['Wind turbine', function (g, t) {
+      var i, ps = [
+        part(cylGeo(0, -0.3, 0, 0.14, 0.26, 3.0, 10), [235, 235, 238]),
+        part(boxGeo(0, 1.25, 0, 0.2, 0.16, 0.3), [220, 220, 224])
+      ];
+      for (i = 0; i < 3; i++) {
+        var a = i * TAU / 3 + t * 0.004;
+        ps.push(part(boxGeo(Math.cos(a) * 0.85, 1.25 + Math.sin(a) * 0.85, 0.3,
+                            0.08 + Math.abs(Math.cos(a)) * 0.75, 0.08 + Math.abs(Math.sin(a)) * 0.75, 0.04),
+                     [246, 246, 250]));
+      }
+      obj(g, mergeC(ps), 0.12, 0.4 + Math.sin(t * 0.0005) * 0.2, 0, 26, 1); }],
+    ['Palm tree', function (g, t) {
+      var i, ps = [], sw = Math.sin(t * 0.0018) * 0.12;
+      for (i = 0; i < 6; i++) {
+        var f = i / 6;
+        ps.push(part(cylGeo(Math.sin(f * 1.2 + sw) * 0.5, -1.4 + i * 0.5, 0,
+                            0.16 - f * 0.05, 0.2 - f * 0.05, 0.55, 8), [140, 100, 60]));
+      }
+      for (i = 0; i < 7; i++) {
+        var a = i * TAU / 7 + sw;
+        ps.push(part(boxGeo(Math.sin(1.2 + sw) * 0.5 + Math.cos(a) * 0.9, 1.5,
+                            Math.sin(a) * 0.9, 0.75, 0.05, 0.22), [60, 150, 70]));
+      }
+      obj(g, mergeC(ps), 0.14, t * 0.0009, 0, 26, 1); }],
+
+    ['Flower 3D', function (g, t) {
+      var i, ps = [part(cylGeo(0, -0.9, 0, 0.08, 0.1, 1.8, 8), [60, 140, 60])];
+      var op = 0.6 + Math.sin(t * 0.0016) * 0.4;
+      for (i = 0; i < 8; i++) {
+        var a = i * TAU / 8;
+        ps.push(part(sphGeo(Math.cos(a) * 0.7 * op, 0.9 + (1 - op) * 0.4, Math.sin(a) * 0.7 * op,
+                            0.34, 5, 8), [235, 90, 150]));
+      }
+      ps.push(part(sphGeo(0, 1.0, 0, 0.3, 6, 9), [245, 200, 70]));
+      ps.push(part(boxGeo(0.6, -0.5, 0, 0.45, 0.05, 0.18), [70, 160, 70]));
+      obj(g, mergeC(ps), 0.16, t * 0.0012, 0, 28, 0); }],
+
+    ['Coral', function (g, t) {
+      var m = geo('coral', function () {
+        var ps = [];
+        (function grow(x, y, z, r, d) {
+          if (d === 0) return;
+          ps.push(part(sphGeo(x, y, z, r, 5, 7), [240, 110 + d * 20, 140]));
+          for (var i = 0; i < 3; i++) {
+            var a = i * TAU / 3 + d;
+            grow(x + Math.cos(a) * r * 1.6, y + r * 1.5, z + Math.sin(a) * r * 1.6, r * 0.6, d - 1);
+          }
+        }(0, -1.2, 0, 0.42, 4));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.1, t * 0.001, 0, 24, 0); }],
+
+    ['Jellyfish', function (g, t) {
+      var i, ps = [], pulse = 1 + Math.sin(t * 0.004) * 0.18;
+      ps.push(part(sphGeo(0, 0.5, 0, 1.0 * pulse, 7, 12), [220, 150, 235]));
+      for (i = 0; i < 8; i++) {
+        var a = i * TAU / 8;
+        for (var k = 0; k < 4; k++) {
+          ps.push(part(sphGeo(Math.cos(a) * (0.7 + k * 0.12) + Math.sin(t * 0.003 + k) * 0.15,
+                              -0.3 - k * 0.5,
+                              Math.sin(a) * (0.7 + k * 0.12), 0.1, 4, 6), [200, 130, 220]));
+        }
+      }
+      obj(g, mergeC(ps), 0.16, t * 0.0009, 0, 26, 0); }],
+
+    ['Bird flock', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 16; i++) {
+        var f = i / 16;
+        var x = Math.sin(t * 0.0012 + f * 6) * 1.8 + (f - 0.5) * 1.2;
+        var y = Math.cos(t * 0.0015 + f * 5) * 1.0;
+        var z = Math.sin(t * 0.0009 + f * 4) * 1.6;
+        var fl = Math.sin(t * 0.02 + i) * 0.5;
+        ps.push(part(boxGeo(x, y, z, 0.05, 0.05, 0.05), [40, 44, 56]));
+        ps.push(part(boxGeo(x - 0.22, y + fl * 0.2, z, 0.22, 0.03, 0.06), [60, 64, 78]));
+        ps.push(part(boxGeo(x + 0.22, y - fl * 0.2, z, 0.22, 0.03, 0.06), [60, 64, 78]));
+      }
+      obj(g, mergeC(ps), 0.1, 0.2, 0, 28, 0); }],
+
+    ['Fish school', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 22; i++) {
+        var a = i * 2.399 + t * 0.0016;
+        var r = 0.5 + (i % 5) * 0.3;
+        var x = Math.cos(a) * r * 1.6, z = Math.sin(a) * r * 1.6;
+        var y = Math.sin(t * 0.002 + i) * 0.8;
+        ps.push(part(boxGeo(x, y, z, 0.24, 0.1, 0.1), [230, 150 + (i % 4) * 22, 60]));
+        ps.push(part(boxGeo(x - 0.3, y, z, 0.1, 0.14, 0.03), [200, 120, 50]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.0007, 0, 26, 0); }],
+
+    ['Butterfly', function (g, t) {
+      var fl = Math.sin(t * 0.008);
+      var ps = [part(cylGeo(0, 0, 0, 0.08, 0.1, 1.1, 8), [50, 40, 40])];
+      for (var s = 0; s < 2; s++) {
+        var sd = s ? 1 : -1;
+        var open = 0.35 + Math.abs(fl) * 0.65;
+        ps.push(part(boxGeo(sd * 0.7 * open, 0.3, Math.abs(fl) * 0.5 * sd, 0.62 * open, 0.42, 0.04),
+                     [240, 130, 60]));
+        ps.push(part(boxGeo(sd * 0.55 * open, -0.35, Math.abs(fl) * 0.4 * sd, 0.45 * open, 0.3, 0.04),
+                     [220, 90, 50]));
+      }
+      obj(g, mergeC(ps), 0.24 + Math.sin(t * 0.001) * 0.2, t * 0.0013, 0, 30, 0); }],
+
+    ['Snowflake 3D', function (g, t) {
+      var V = [[0, 0, 0]], E = [], i, k;
+      for (i = 0; i < 6; i++) {
+        var a = i * TAU / 6;
+        var base = V.length;
+        V.push([Math.cos(a) * 1.6, Math.sin(a) * 1.6, 0]);
+        E.push([0, base]);
+        for (k = 1; k <= 3; k++) {
+          var px = Math.cos(a) * k * 0.4, py = Math.sin(a) * k * 0.4;
+          V.push([px + Math.cos(a + 1) * 0.35, py + Math.sin(a + 1) * 0.35, 0]);
+          V.push([px + Math.cos(a - 1) * 0.35, py + Math.sin(a - 1) * 0.35, 0]);
+          E.push([base, V.length - 2]); E.push([base, V.length - 1]);
+        }
+      }
+      wire(g, xform(V, Math.sin(t * 0.0009) * 0.6, t * 0.0013, 0), E, 30, '190,235,255', 2); }],
+
+    ['Rain 3D', function (g, t) {
+      var V = [], E = [], i;
+      for (i = 0; i < 60; i++) {
+        var x = ((i * 37) % 40) / 10 - 2, z = ((i * 53) % 40) / 10 - 2;
+        var y = 2 - (((t * 0.004 + i * 0.17) % 4));
+        V.push([x, y, z]); V.push([x, y - 0.35, z]);
+        E.push([i * 2, i * 2 + 1]);
+      }
+      wire(g, xform(V, 0.25, t * 0.0003, 0), E, 30, '150,215,255', 1.8); }],
+
+    ['Smoke plume', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 18; i++) {
+        var f = ((t * 0.0004 + i * 0.055) % 1);
+        var r = 0.16 + f * 0.9;
+        ps.push(part(sphGeo(Math.sin(f * 5 + i) * f * 1.2, -1.6 + f * 3.2,
+                            Math.cos(f * 4 + i) * f * 0.9, r, 4, 6),
+                     [200 - f * 90, 200 - f * 90, 210 - f * 80]));
+      }
+      obj(g, mergeC(ps), 0.1, t * 0.0006, 0, 26, 0); }],
+
+    ['Fire 3D', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 20; i++) {
+        var f = ((t * 0.0011 + i * 0.05) % 1);
+        var r = 0.5 * (1 - f) + 0.08;
+        ps.push(part(sphGeo(Math.sin(f * 7 + i) * f * 0.6, -1.3 + f * 2.6,
+                            Math.cos(f * 6 + i) * f * 0.5, r, 4, 6),
+                     [255, 200 - f * 150, 60 - f * 50]));
+      }
+      obj(g, mergeC(ps), 0.08, t * 0.0009, 0, 28, 0); }],
+
+    ['Volcano', function (g, t) {
+      var m = geo('volc', function () { return mergeC([
+        part(cylGeo(0, -0.6, 0, 0.55, 2.0, 1.8, 12), [90, 74, 66]),
+        part(cylGeo(0, 0.32, 0, 0.5, 0.55, 0.12, 12), [50, 40, 36])
+      ]); });
+      obj(g, m, 0.2, t * 0.0006, 0, 26, 0);
+      var i, ps = [];
+      for (i = 0; i < 14; i++) {
+        var f = ((t * 0.0009 + i * 0.07) % 1);
+        var a = i * 2.399;
+        ps.push(part(sphGeo(Math.cos(a) * f * 1.4, 0.4 + f * 1.9 - f * f * 2.2,
+                            Math.sin(a) * f * 1.4, 0.13, 4, 6),
+                     [255, 150 - f * 100, 40]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.0006, 0, 26, 0); }],
+
+    ['Iceberg', function (g, t) {
+      var m = geo('berg', function () { return mergeC([
+        part(cylGeo(0, 0.7, 0, 0.15, 1.1, 1.5, 7), [225, 240, 250]),
+        part(cylGeo(0.5, 0.3, 0.3, 0.1, 0.6, 1.0, 6), [235, 246, 252]),
+        part(cylGeo(0, -1.1, 0, 1.7, 1.0, 2.0, 8), [130, 190, 220])
+      ]); });
+      obj(g, m, 0.2 + Math.sin(t * 0.0018) * 0.05, t * 0.0009, 0, 26, 0); }],
+
+    ['Mountain range', function (g, t) {
+      var m = geo('mtn', function () {
+        var ps = [], i;
+        for (i = 0; i < 6; i++) {
+          var x = -2.2 + i * 0.9, h = 1.0 + ((i * 7) % 5) * 0.28;
+          ps.push(part(cylGeo(x, -0.6 + h / 2, ((i * 13) % 5) * 0.3 - 0.6, 0.02, 0.7, h, 4),
+                       [110 + (i % 3) * 14, 108, 104]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.16, t * 0.0005, 0, 26, 0); }],
+
+    ['Dune field', function (g, t) {
+      var m = geo('grdD', function () { return gGrid(14, 0.3); });
+      var V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i];
+        V.push([p[0], Math.sin(p[0] * 1.6 + t * 0.0009) * 0.42 + Math.sin(p[2] * 0.9) * 0.3, p[2]]);
+      }
+      wire(g, xform(V, 0.55, t * 0.0003, 0), m.E, 34, '235,200,130', 1.3); }],
+
+    ['Ocean swell', function (g, t) {
+      var m = geo('grdO', function () { return gGrid(16, 0.26); });
+      var V = [], i;
+      for (i = 0; i < m.V.length; i++) {
+        var p = m.V[i], d = Math.hypot(p[0], p[2]);
+        V.push([p[0], Math.sin(p[0] * 2.2 + t * 0.004) * 0.22 +
+                      Math.sin(d * 2.6 - t * 0.003) * 0.28, p[2]]);
+      }
+      wire(g, xform(V, 0.5, t * 0.0002, 0), m.E, 34, '90,190,235', 1.3); }],
+
+    ['Geodesic dome', function (g, t) {
+      var m = geo('geod', function () {
+        var ico = gIcosa(), V = [], E = [], i, k;
+        for (i = 0; i < ico.F.length; i++) {
+          var f = ico.F[i], base = V.length;
+          for (k = 0; k < 3; k++) {
+            var a = ico.V[f[k]], b = ico.V[f[(k + 1) % 3]];
+            var mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+            var L = Math.hypot(mid[0], mid[1], mid[2]) || 1;
+            V.push([mid[0] / L * 1.9, mid[1] / L * 1.9, mid[2] / L * 1.9]);
+          }
+          E.push([base, base + 1]); E.push([base + 1, base + 2]); E.push([base + 2, base]);
+        }
+        return { V: V, E: E };
+      });
+      wire(g, xform(m.V, 0.3, t * 0.0011, 0), m.E, 28, '150,235,200', 1.6); }],
+
+    ['Football', function (g, t) {
+      var m = geo('ball', function () {
+        var ico = gIcosa(), V = [], F = [], C = [], i, k;
+        for (i = 0; i < ico.F.length; i++) {
+          var f = ico.F[i], base = V.length;
+          var cx2 = 0, cy2 = 0, cz2 = 0;
+          for (k = 0; k < 3; k++) { cx2 += ico.V[f[k]][0]; cy2 += ico.V[f[k]][1]; cz2 += ico.V[f[k]][2]; }
+          for (k = 0; k < 3; k++) {
+            var v = ico.V[f[k]];
+            var px = v[0] * 0.62 + cx2 / 3 * 0.38, py = v[1] * 0.62 + cy2 / 3 * 0.38,
+                pz = v[2] * 0.62 + cz2 / 3 * 0.38;
+            var L = Math.hypot(px, py, pz) || 1;
+            V.push([px / L * 1.7, py / L * 1.7, pz / L * 1.7]);
+          }
+          F.push([base, base + 1, base + 2]);
+          C.push(i % 3 === 0 ? [30, 30, 36] : [244, 244, 240]);
+        }
+        return { V: V, F: F, C: C };
+      });
+      obj(g, m, t * 0.0013, t * 0.0018, 0, 30, 1); }],
+
+    ['Atom', function (g, t) {
+      var i, k, ps = [part(sphGeo(0, 0, 0, 0.5, 6, 9), [240, 110, 70])];
+      for (i = 0; i < 3; i++) {
+        var a = t * (0.004 + i * 0.0012) + i * 2.1;
+        var tilt = i * TAU / 3;
+        var x = Math.cos(a) * 1.7, y = Math.sin(a) * 1.7;
+        var rx2 = x, ry2 = y * Math.cos(tilt), rz2 = y * Math.sin(tilt);
+        ps.push(part(sphGeo(rx2, ry2, rz2, 0.2, 5, 7), [110, 200, 245]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.0007, 0, 28, 0);
+      for (i = 0; i < 3; i++) {
+        var V = [], E = [], tilt2 = i * TAU / 3;
+        for (k = 0; k < 30; k++) {
+          var aa = k / 30 * TAU;
+          var x2 = Math.cos(aa) * 1.7, y2 = Math.sin(aa) * 1.7;
+          V.push([x2, y2 * Math.cos(tilt2), y2 * Math.sin(tilt2)]);
+          E.push([k, (k + 1) % 30]);
+        }
+        wire(g, xform(V, 0.2, t * 0.0007, 0), E, 28, '120,200,240', 1.2);
+      } }],
+
+    ['Water molecule', function (g, t) {
+      var m = geo('h2o', function () { return mergeC([
+        part(sphGeo(0, 0, 0, 0.85, 7, 10), [220, 70, 60]),
+        part(sphGeo(1.25, 0.85, 0, 0.5, 6, 9), [240, 240, 246]),
+        part(sphGeo(-1.25, 0.85, 0, 0.5, 6, 9), [240, 240, 246]),
+        part(cylGeo(0.62, 0.42, 0, 0.12, 0.12, 1.5, 6), [180, 180, 190]),
+        part(cylGeo(-0.62, 0.42, 0, 0.12, 0.12, 1.5, 6), [180, 180, 190])
+      ]); });
+      obj(g, m, Math.sin(t * 0.0011) * 0.4, t * 0.0014, 0, 26, 0); }],
+
+    ['Crystal lattice', function (g, t) {
+      var m = geo('latt', function () {
+        var ps = [], x, y, z;
+        for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) {
+          ps.push(part(sphGeo(x * 1.1, y * 1.1, z * 1.1, 0.22, 4, 6),
+                       (x + y + z) % 2 ? [90, 160, 240] : [240, 200, 90]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, t * 0.0009, t * 0.0013, 0, 26, 0);
+      var c = geo('cub', gCube);
+      var V = c.V.map(function (p) { return [p[0] * 1.1, p[1] * 1.1, p[2] * 1.1]; });
+      wire(g, xform(V, t * 0.0009, t * 0.0013, 0), c.E, 26, '160,180,210', 1); }],
+
+    ['Buckyball', function (g, t) {
+      var m = geo('bucky', function () {
+        var ico = gIcosa(), V = [], E = [], i, k;
+        for (i = 0; i < ico.E.length; i++) {
+          var a = ico.V[ico.E[i][0]], b = ico.V[ico.E[i][1]];
+          for (k = 1; k <= 2; k++) {
+            var f = k / 3;
+            var p = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+            var L = Math.hypot(p[0], p[1], p[2]) || 1;
+            V.push([p[0] / L * 1.8, p[1] / L * 1.8, p[2] / L * 1.8]);
+          }
+        }
+        return { V: V, E: autoEdges(V, 0.35) };
+      });
+      wire(g, xform(m.V, t * 0.0009, t * 0.0013, 0), m.E, 28, '140,240,180', 1.5); }],
+
+    ['Solar system', function (g, t) {
+      var i, ps = [part(sphGeo(0, 0, 0, 0.6, 7, 10), [250, 200, 60])];
+      var cols = [[190, 150, 120], [230, 180, 110], [80, 150, 230], [210, 100, 70]];
+      for (i = 0; i < 4; i++) {
+        var a = t * (0.0028 - i * 0.0005) + i * 1.9, r = 1.0 + i * 0.55;
+        ps.push(part(sphGeo(Math.cos(a) * r, 0, Math.sin(a) * r, 0.14 + i * 0.04, 5, 8), cols[i]));
+      }
+      obj(g, mergeC(ps), 0.55, t * 0.0004, 0, 27, 0);
+      for (i = 0; i < 4; i++) {
+        var V = [], E = [], k, r2 = 1.0 + i * 0.55;
+        for (k = 0; k < 36; k++) { var aa = k / 36 * TAU;
+          V.push([Math.cos(aa) * r2, 0, Math.sin(aa) * r2]); E.push([k, (k + 1) % 36]); }
+        wire(g, xform(V, 0.55, t * 0.0004, 0), E, 27, '150,170,200', 1);
+      } }],
+
+    ['Asteroid field', function (g, t) {
+      var m = geo('rocks', function () {
+        var ps = [], i;
+        for (i = 0; i < 22; i++) {
+          var a = i * 2.399, r = 0.5 + (i % 6) * 0.42;
+          ps.push(part(boxGeo(Math.cos(a) * r * 1.6, ((i * 17) % 9) / 9 * 2 - 1,
+                              Math.sin(a) * r * 1.6, 0.14 + (i % 3) * 0.08,
+                              0.12 + (i % 4) * 0.06, 0.15 + (i % 2) * 0.1),
+                       [120 + (i % 4) * 18, 112, 100]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, t * 0.0005, t * 0.0011, t * 0.0003, 26, 0); }],
+
+    ['Wormhole', function (g, t) {
+      var V = [], E = [], i, k, rings = 16, seg = 16;
+      for (i = 0; i < rings; i++) {
+        var f = i / rings;
+        var z = ((f * 6 + t * 0.0022) % 6) - 3;
+        var r = 0.35 + Math.abs(z) * 0.55;
+        var base = V.length;
+        for (k = 0; k < seg; k++) {
+          var a = k / seg * TAU + z * 0.5;
+          V.push([Math.cos(a) * r, Math.sin(a) * r, z]);
+          E.push([base + k, base + (k + 1) % seg]);
+        }
+      }
+      wire(g, xform(V, 0.1, 0.1, 0), E, 40, '180,120,255', 1.6); }]
+,
+    ['Planetary gears', function (g, t) {
+      var i, ps = [], mk = function (cx2, cy2, r, teeth, rot, col) {
+        var out = [part(cylGeo(cx2, cy2, 0, r, r, 0.3, 12), col)], k;
+        for (k = 0; k < teeth; k++) { var a = k * TAU / teeth + rot;
+          out.push(part(boxGeo(cx2 + Math.cos(a) * (r + 0.14), cy2 + Math.sin(a) * (r + 0.14), 0,
+                               0.1, 0.1, 0.15), col)); }
+        return out;
+      };
+      ps = ps.concat(mk(0, 0, 0.5, 8, t * 0.004, [220, 180, 70]));
+      for (i = 0; i < 3; i++) {
+        var a = i * TAU / 3 + t * 0.0016;
+        ps = ps.concat(mk(Math.cos(a) * 1.15, Math.sin(a) * 1.15, 0.4, 7, -t * 0.005, [150, 190, 230]));
+      }
+      obj(g, mergeC(ps), 0.32, Math.sin(t * 0.0006) * 0.3, 0, 30, 1); }],
+
+    ['Orrery', function (g, t) {
+      var i, ps = [part(cylGeo(0, -1.0, 0, 0.12, 0.6, 1.4, 10), [180, 150, 90]),
+                   part(sphGeo(0, 0.2, 0, 0.34, 6, 9), [250, 200, 60])];
+      for (i = 0; i < 3; i++) {
+        var a = t * (0.0032 - i * 0.0008) + i * 2, r = 0.75 + i * 0.5;
+        ps.push(part(cylGeo(0, 0.2, 0, 0.03, 0.03, r * 2, 5, 'x'), [200, 175, 120]));
+        ps.push(part(sphGeo(Math.cos(a) * r, 0.2, Math.sin(a) * r, 0.13, 5, 7),
+                     [[130, 190, 240], [220, 150, 90], [160, 220, 150]][i]));
+      }
+      obj(g, mergeC(ps), 0.42, t * 0.0006, 0, 28, 0); }],
+
+    ['Clock movement', function (g, t) {
+      var ps = [part(cylGeo(0, 0, -0.2, 1.7, 1.7, 0.16, 16), [214, 208, 190])];
+      var mk = function (cx2, cy2, r, teeth, rot, col) {
+        var out = [part(cylGeo(cx2, cy2, 0, r, r, 0.16, 12), col)], k;
+        for (k = 0; k < teeth; k++) { var a = k * TAU / teeth + rot;
+          out.push(part(boxGeo(cx2 + Math.cos(a) * (r + 0.1), cy2 + Math.sin(a) * (r + 0.1), 0,
+                               0.07, 0.07, 0.08), col)); }
+        return out;
+      };
+      ps = ps.concat(mk(-0.55, 0.3, 0.42, 9, t * 0.003, [200, 170, 90]));
+      ps = ps.concat(mk(0.5, -0.2, 0.32, 7, -t * 0.005, [180, 190, 200]));
+      ps.push(part(boxGeo(0, 0, 0.3, 0.05, 1.2, 0.03), [60, 60, 70]));
+      ps.push(part(boxGeo(0, 0, 0.34, 0.8, 0.05, 0.03), [60, 60, 70]));
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0005) * 0.4, 0, 30, 1); }],
+
+    ['Piston engine', function (g, t) {
+      var i, ps = [], ph = t * 0.005;
+      for (i = 0; i < 3; i++) {
+        var x = -1.2 + i * 1.2;
+        var y = Math.sin(ph + i * 2.1) * 0.45;
+        ps.push(part(boxGeo(x, 0.6, 0, 0.32, 0.7, 0.32), [130, 136, 148]));
+        ps.push(part(boxGeo(x, y + 0.3, 0, 0.26, 0.22, 0.26), [220, 150, 60]));
+        ps.push(part(cylGeo(x, y - 0.35, 0, 0.07, 0.07, 0.9, 6), [190, 194, 204]));
+      }
+      ps.push(part(cylGeo(0, -1.0, 0, 0.2, 0.2, 3.0, 10, 'x'), [90, 96, 108]));
+      obj(g, mergeC(ps), 0.2, 0.5 + Math.sin(t * 0.0006) * 0.25, 0, 28, 1); }],
+
+    ['Conveyor belt', function (g, t) {
+      var i, ps = [
+        part(boxGeo(0, -0.55, 0, 2.2, 0.1, 0.7), [70, 74, 84]),
+        part(cylGeo(-2.2, -0.55, 0, 0.35, 0.35, 0.7, 10, 'z'), [110, 116, 128]),
+        part(cylGeo(2.2, -0.55, 0, 0.35, 0.35, 0.7, 10, 'z'), [110, 116, 128])
+      ];
+      for (i = 0; i < 4; i++) {
+        var x = ((t * 0.0016 + i * 0.25) % 1) * 4.4 - 2.2;
+        ps.push(part(boxGeo(x, -0.15, 0, 0.3, 0.3, 0.3),
+                     [[220, 90, 80], [90, 180, 220], [240, 200, 80], [130, 210, 130]][i]));
+      }
+      obj(g, mergeC(ps), 0.24, 0.4, 0, 27, 1); }],
+
+    ['Roller coaster', function (g, t) {
+      var V = [], E = [], i, n = 90;
+      for (i = 0; i < n; i++) {
+        var u = i / n * TAU;
+        V.push([Math.cos(u) * 2.0, Math.sin(u * 2) * 0.9 + Math.sin(u * 3) * 0.4, Math.sin(u) * 1.4]);
+        E.push([i, (i + 1) % n]);
+      }
+      wire(g, xform(V, 0.35, t * 0.0007, 0), E, 26, '210,120,90', 2.2);
+      var ps = [], k;
+      for (k = 0; k < 3; k++) {
+        var u2 = ((t * 0.0009 + k * 0.03) % 1) * TAU;
+        ps.push(part(boxGeo(Math.cos(u2) * 2.0, Math.sin(u2 * 2) * 0.9 + Math.sin(u2 * 3) * 0.4 + 0.16,
+                            Math.sin(u2) * 1.4, 0.16, 0.12, 0.16),
+                     k ? [230, 210, 90] : [220, 70, 70]));
+      }
+      obj(g, mergeC(ps), 0.35, t * 0.0007, 0, 26, 0); }],
+
+    ['Ferris frame', function (g, t) {
+      var i, V = [], E = [], n = 14;
+      for (i = 0; i < n; i++) {
+        var a = i * TAU / n + t * 0.0012;
+        V.push([Math.cos(a) * 1.9, Math.sin(a) * 1.9, 0]);
+        V.push([Math.cos(a) * 1.9, Math.sin(a) * 1.9, 0.7]);
+        E.push([i * 2, i * 2 + 1]);
+        E.push([i * 2, ((i + 1) % n) * 2]);
+        E.push([i * 2 + 1, ((i + 1) % n) * 2 + 1]);
+      }
+      wire(g, xform(V, 0.2, Math.sin(t * 0.0005) * 0.4, 0), E, 26, '160,220,255', 1.6);
+      var ps = [];
+      for (i = 0; i < n; i++) {
+        var a2 = i * TAU / n + t * 0.0012;
+        ps.push(part(boxGeo(Math.cos(a2) * 1.9, Math.sin(a2) * 1.9 - 0.28, 0.35, 0.16, 0.14, 0.16),
+                     [[230, 80, 70], [240, 200, 70], [90, 180, 230], [130, 210, 130]][i % 4]));
+      }
+      obj(g, mergeC(ps), 0.2, Math.sin(t * 0.0005) * 0.4, 0, 26, 0); }],
+
+    ['Spinning top', function (g, t) {
+      var wob = Math.sin(t * 0.006) * 0.16;
+      var m = geo('top', function () { return mergeC([
+        part(cylGeo(0, 0.35, 0, 0.9, 0.9, 0.35, 14), [220, 70, 90]),
+        part(cylGeo(0, -0.35, 0, 0.05, 0.9, 1.05, 14), [240, 200, 80]),
+        part(cylGeo(0, 0.8, 0, 0.12, 0.12, 0.6, 8), [180, 186, 200])
+      ]); });
+      obj(g, m, wob, t * 0.03, wob * 0.6, 30, 0); }],
+
+    ['Yo-yo', function (g, t) {
+      var c = (t % 2200) / 2200;
+      var drop = Math.sin(c * Math.PI) * 1.8;
+      var ps = [
+        part(cylGeo(0, 1.6, 0, 0.06, 0.06, 0.1, 6), [200, 200, 210]),
+        part(boxGeo(0, 1.6 - drop / 2, 0, 0.03, drop / 2, 0.03), [230, 230, 235]),
+        part(cylGeo(0, 1.5 - drop, 0.22, 0.7, 0.7, 0.2, 12), [230, 80, 90]),
+        part(cylGeo(0, 1.5 - drop, -0.22, 0.7, 0.7, 0.2, 12), [230, 80, 90]),
+        part(cylGeo(0, 1.5 - drop, 0, 0.2, 0.2, 0.45, 8, 'z'), [240, 200, 80])
+      ];
+      obj(g, mergeC(ps), 0.2, t * 0.02, 0, 28, 0); }],
+
+    ['Slinky', function (g, t) {
+      var V = [], E = [], i, n = 100;
+      for (i = 0; i < n; i++) {
+        var u = i / n;
+        var stretch = 1 + Math.sin(t * 0.003) * 0.5;
+        V.push([Math.cos(u * TAU * 7) * 1.0,
+                (u * 2.6 - 1.3) * stretch,
+                Math.sin(u * TAU * 7) * 1.0]);
+        if (i) E.push([i - 1, i]);
+      }
+      wire(g, xform(V, 0.25, t * 0.0009, 0), E, 28, '200,205,215', 2.4); }],
+
+    ['Chain links', function (g, t) {
+      var i, k, V = [], E = [], n = 6;
+      for (i = 0; i < n; i++) {
+        var base = V.length;
+        var y = (i - (n - 1) / 2) * 0.72;
+        var sw = Math.sin(t * 0.002 + i * 0.5) * 0.25;
+        for (k = 0; k < 18; k++) {
+          var a = k / 18 * TAU;
+          var px = Math.cos(a) * 0.45, pz = Math.sin(a) * 0.28;
+          if (i % 2) V.push([px + sw, y, pz]);
+          else V.push([pz + sw, y, px]);
+          E.push([base + k, base + (k + 1) % 18]);
+        }
+      }
+      wire(g, xform(V, 0.2, t * 0.001, 0), E, 30, '190,196,210', 2); }],
+
+    ['Figure-eight knot', function (g, t) {
+      var m = geo('fig8', function () {
+        var V = [], E = [], i, n = 140;
+        for (i = 0; i < n; i++) {
+          var u = i / n * TAU;
+          V.push([(2 + Math.cos(2 * u)) * Math.cos(3 * u) * 0.5,
+                  (2 + Math.cos(2 * u)) * Math.sin(3 * u) * 0.5,
+                  Math.sin(4 * u) * 0.6]);
+          E.push([i, (i + 1) % n]);
+        }
+        return { V: V, E: E };
+      });
+      wire(g, xform(m.V, t * 0.0011, t * 0.0014, 0), m.E, 26, '255,170,90', 2.4); }],
+
+    ['Torus stack', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 4; i++) {
+        var m = gTorus(14, 8, 1.3 - i * 0.22, 0.28);
+        var V = m.V.map(function (p) { return [p[0], p[1] + (i - 1.5) * 0.6, p[2]]; });
+        ps.push(part({ V: V, F: m.F },
+                     [[230, 80, 90], [240, 190, 80], [110, 200, 130], [110, 170, 240]][i]));
+      }
+      obj(g, mergeC(ps), 0.45, t * 0.0013, 0, 27, 0); }],
+
+    ['Sphere packing', function (g, t) {
+      var m = geo('pack', function () {
+        var ps = [], x, y, z;
+        for (x = -1; x <= 1; x++) for (y = -1; y <= 1; y++) for (z = -1; z <= 1; z++) {
+          if (Math.abs(x) + Math.abs(y) + Math.abs(z) > 2) continue;
+          ps.push(part(sphGeo(x * 0.9, y * 0.9, z * 0.9, 0.45, 5, 8),
+                       [200 - Math.abs(x) * 40, 140 + Math.abs(y) * 50, 230 - Math.abs(z) * 60]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, t * 0.0009, t * 0.0012, 0, 28, 0); }],
+
+    ['Cantor dust', function (g, t) {
+      var m = geo('cantor', function () {
+        var ps = [];
+        (function div(x, y, z, s, d) {
+          if (d === 0) { ps.push(part(boxGeo(x, y, z, s, s, s), [220, 210, 240])); return; }
+          for (var i = -1; i <= 1; i += 2) for (var j = -1; j <= 1; j += 2)
+            for (var k = -1; k <= 1; k += 2)
+              div(x + i * s * 0.66, y + j * s * 0.66, z + k * s * 0.66, s / 3, d - 1);
+        }(0, 0, 0, 0.9, 2));
+        return mergeC(ps);
+      });
+      obj(g, m, t * 0.0008, t * 0.0012, 0, 26, 1); }],
+
+    ['Impossible triangle', function (g, t) {
+      var m = geo('penrose', function () {
+        var ps = [], i, k;
+        for (i = 0; i < 3; i++) {
+          var a = i * TAU / 3;
+          for (k = 0; k < 4; k++) {
+            var f = k / 4;
+            ps.push(part(boxGeo(Math.cos(a) * 1.3 + Math.cos(a + 2.09) * (f * 1.6 - 0.8),
+                                Math.sin(a) * 1.3 + Math.sin(a + 2.09) * (f * 1.6 - 0.8),
+                                0, 0.24, 0.24, 0.24),
+                         [200 - i * 30, 170 + i * 20, 230 - i * 40]));
+          }
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.2, t * 0.0009, t * 0.0005, 28, 1); }],
+
+    ['Neon grid', function (g, t) {
+      var V = [], E = [], i, n = 12;
+      for (i = 0; i <= n; i++) {
+        var z = ((i * 0.5 + t * 0.0024) % 6) - 3;
+        var base = V.length;
+        V.push([-3, 0, z]); V.push([3, 0, z]);
+        E.push([base, base + 1]);
+      }
+      for (i = -6; i <= 6; i++) {
+        var base2 = V.length;
+        V.push([i * 0.5, 0, -3]); V.push([i * 0.5, 0, 3]);
+        E.push([base2, base2 + 1]);
+      }
+      wire(g, xform(V, 0.75, 0, 0), E, 32, '255,80,200', 1.6);
+      var s = geo('sunS', function () { return gSphere(8, 12, 1.1); });
+      var V2 = s.V.map(function (p) { return [p[0], p[1] * 0.9 + 1.4, p[2] - 3]; });
+      solid(g, xform(V2, 0, 0, 0), s.F, 32, [255, 140, 60], 0); }],
+
+    ['City blocks', function (g, t) {
+      var m = geo('city', function () {
+        var ps = [], x, z;
+        for (x = -2; x <= 2; x++) for (z = -2; z <= 2; z++) {
+          var h = 0.3 + ((x * 7 + z * 13 + 20) % 9) * 0.22;
+          ps.push(part(boxGeo(x * 0.75, -1.2 + h, z * 0.75, 0.28, h, 0.28),
+                       [110 + ((x + z) % 3) * 22, 118, 140]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.42, t * 0.0007, 0, 26, 1); }],
+
+    ['Skyscraper', function (g, t) {
+      var m = geo('tower', function () {
+        var ps = [], i;
+        for (i = 0; i < 7; i++) {
+          var w = 0.85 - i * 0.09;
+          ps.push(part(boxGeo(0, -1.5 + i * 0.52, 0, w, 0.24, w),
+                       [150 + i * 8, 160 + i * 8, 185 + i * 6]));
+        }
+        ps.push(part(cylGeo(0, 2.3, 0, 0.03, 0.05, 0.9, 6), [220, 220, 230]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.14, t * 0.0011, 0, 26, 1); }],
+
+    ['Fountain', function (g, t) {
+      var i, ps = [
+        part(cylGeo(0, -1.2, 0, 1.7, 1.8, 0.3, 14), [200, 196, 186]),
+        part(cylGeo(0, -0.6, 0, 0.3, 0.5, 0.9, 10), [214, 210, 200]),
+        part(cylGeo(0, 0.05, 0, 0.9, 0.6, 0.16, 12), [200, 196, 186])
+      ];
+      for (i = 0; i < 16; i++) {
+        var a = i * TAU / 16;
+        var f = ((t * 0.0016 + i * 0.06) % 1);
+        var r = f * 1.5;
+        ps.push(part(sphGeo(Math.cos(a) * r, 0.9 - f * f * 2.4, Math.sin(a) * r, 0.1, 4, 6),
+                     [130, 200, 240]));
+      }
+      obj(g, mergeC(ps), 0.3, t * 0.0007, 0, 26, 0); }],
+
+    ['Maze', function (g, t) {
+      var m = geo('maze', function () {
+        var ps = [], x, z;
+        for (x = -3; x <= 3; x++) for (z = -3; z <= 3; z++) {
+          if (((x * 5 + z * 11 + 33) % 7) > 3) continue;
+          ps.push(part(boxGeo(x * 0.5, -0.6, z * 0.5, 0.22, 0.42, 0.22), [170, 150, 200]));
+        }
+        ps.push(part(boxGeo(0, -1.1, 0, 1.9, 0.08, 1.9), [90, 84, 110]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.55, t * 0.0008, 0, 28, 1); }],
+
+    ['Domino run 3D', function (g, t) {
+      var i, ps = [], front = ((t % 5000) / 5000) * 14;
+      for (i = 0; i < 13; i++) {
+        var fall = Math.max(0, Math.min(1, front - i));
+        var a = fall * 1.4;
+        var x = -2.2 + i * 0.38;
+        ps.push(part(boxGeo(x + Math.sin(a) * 0.3, -0.6 + Math.cos(a) * 0.4, 0,
+                            0.06 + Math.sin(a) * 0.3, 0.42 * Math.cos(a) + 0.06, 0.22),
+                     [238, 234, 224]));
+      }
+      ps.push(part(boxGeo(0, -1.05, 0, 2.6, 0.06, 0.4), [110, 96, 84]));
+      obj(g, mergeC(ps), 0.28, 0.35, 0, 27, 1); }],
+
+    ['Pendulum wave', function (g, t) {
+      var i, ps = [part(boxGeo(0, 1.6, 0, 2.2, 0.06, 0.06), [120, 126, 140])];
+      for (i = 0; i < 11; i++) {
+        var len = 1.0 + i * 0.09;
+        var a = Math.sin(t * 0.0022 * (1 + i * 0.045)) * 0.55;
+        var x = -1.9 + i * 0.38;
+        ps.push(part(sphGeo(x + Math.sin(a) * len, 1.6 - Math.cos(a) * len, 0, 0.14, 5, 7),
+                     [240 - i * 12, 120 + i * 10, 90 + i * 14]));
+      }
+      obj(g, mergeC(ps), 0.12, Math.sin(t * 0.0004) * 0.3, 0, 28, 0); }],
+
+    ['Infinity mirror', function (g, t) {
+      var i, k;
+      for (i = 10; i > 0; i--) {
+        var f = i / 10;
+        var V = [], E = [], z = -i * 0.55 + ((t * 0.0018) % 0.55);
+        for (k = 0; k < 4; k++) {
+          var a = k * TAU / 4 + Math.PI / 4;
+          V.push([Math.cos(a) * 1.7 * f, Math.sin(a) * 1.7 * f, z]);
+          E.push([k, (k + 1) % 4]);
+        }
+        wire(g, xform(V, 0, 0, t * 0.0006), E, 34,
+             i % 2 ? '255,90,190' : '90,220,255', 2.2);
+      } }],
+
+    ['Sound bars 3D', function (g, t) {
+      var i, k, ps = [];
+      for (i = 0; i < 6; i++) for (k = 0; k < 6; k++) {
+        var h = 0.12 + Math.abs(Math.sin(t * 0.004 + i * 0.6 + k * 0.4)) * 1.1;
+        ps.push(part(boxGeo((i - 2.5) * 0.5, -1.2 + h, (k - 2.5) * 0.5, 0.18, h, 0.18),
+                     [90 + h * 120, 220 - h * 60, 140]));
+      }
+      obj(g, mergeC(ps), 0.42, t * 0.0007, 0, 27, 1); }],
+
+    ['Rotating letters', function (g, t) {
+      var i, ps = [];
+      var pat = [[0,0],[0,1],[0,2],[1,2],[2,2]];
+      for (i = 0; i < pat.length; i++)
+        ps.push(part(boxGeo((pat[i][0] - 1) * 0.5, (1 - pat[i][1]) * 0.5, 0, 0.22, 0.22, 0.22),
+                     [240, 90, 160]));
+      obj(g, mergeC(ps), Math.sin(t * 0.001) * 0.5, t * 0.0018, 0, 30, 1); }]
+,
+    ['Dinosaur', function (g, t) {
+      var sw = Math.sin(t * 0.003);
+      var ps = [
+        part(sphGeo(0, 0, 0, 0.85, 6, 9), [110, 160, 90]),
+        part(cylGeo(-1.3, 0.35, 0, 0.18, 0.4, 1.6, 8, 'x'), [120, 170, 95]),
+        part(cylGeo(1.1, 0.75, 0, 0.22, 0.4, 1.5, 8), [120, 170, 95]),
+        part(sphGeo(1.25, 1.55, 0, 0.34, 5, 8), [130, 180, 100]),
+        part(boxGeo(1.55, 1.5, 0, 0.22, 0.12, 0.16), [130, 180, 100]),
+        part(cylGeo(-0.4, -0.85 + sw * 0.08, 0.4, 0.16, 0.2, 0.9, 6), [100, 150, 82]),
+        part(cylGeo(-0.4, -0.85 - sw * 0.08, -0.4, 0.16, 0.2, 0.9, 6), [100, 150, 82]),
+        part(cylGeo(0.5, -0.85 - sw * 0.08, 0.4, 0.16, 0.2, 0.9, 6), [100, 150, 82]),
+        part(cylGeo(0.5, -0.85 + sw * 0.08, -0.4, 0.16, 0.2, 0.9, 6), [100, 150, 82])
+      ];
+      obj(g, mergeC(ps), 0.16, t * 0.001, 0, 26, 1); }],
+
+    ['Whale', function (g, t) {
+      var sw = Math.sin(t * 0.0026);
+      var ps = [
+        part(sphGeo(0, 0, 0, 1.35, 7, 11), [70, 110, 160]),
+        part(sphGeo(-1.1, 0, 0, 0.7, 5, 8), [66, 104, 152]),
+        part(boxGeo(-2.0, sw * 0.25, 0, 0.5, 0.08, 0.6), [60, 96, 142]),
+        part(boxGeo(0.3, -0.5, 0.9, 0.5, 0.08, 0.3), [64, 100, 148]),
+        part(boxGeo(0.3, -0.5, -0.9, 0.5, 0.08, 0.3), [64, 100, 148]),
+        part(sphGeo(0.4, -0.9, 0, 1.0, 5, 9), [210, 220, 230]),
+        part(sphGeo(1.0, 0.35, 0.4, 0.1, 4, 6), [20, 20, 26])
+      ];
+      obj(g, mergeC(ps), 0.14 + sw * 0.05, t * 0.001, 0, 24, 0); }],
+
+    ['Beetle', function (g, t) {
+      var lg = Math.sin(t * 0.008);
+      var ps = [
+        part(sphGeo(0, 0, 0, 1.0, 6, 10), [50, 90, 60]),
+        part(sphGeo(0.9, 0.15, 0, 0.45, 5, 8), [40, 70, 48]),
+        part(boxGeo(0, 0.6, 0, 0.05, 0.35, 0.9), [30, 55, 38]),
+        part(cylGeo(1.35, 0.4, 0.15, 0.03, 0.05, 0.7, 5, 'x'), [30, 50, 36]),
+        part(cylGeo(1.35, 0.4, -0.15, 0.03, 0.05, 0.7, 5, 'x'), [30, 50, 36])
+      ], i;
+      for (i = 0; i < 6; i++) {
+        var sd = i < 3 ? 1 : -1, k = i % 3;
+        ps.push(part(cylGeo(-0.5 + k * 0.5, -0.7 + lg * 0.1 * (k % 2 ? 1 : -1), sd * 0.9,
+                            0.05, 0.07, 0.7, 5), [35, 60, 42]));
+      }
+      obj(g, mergeC(ps), 0.34, t * 0.0011, 0, 26, 1); }],
+
+    ['Ant', function (g, t) {
+      var lg = Math.sin(t * 0.01);
+      var ps = [
+        part(sphGeo(-1.0, 0, 0, 0.62, 5, 8), [110, 50, 30]),
+        part(sphGeo(0, 0, 0, 0.4, 5, 8), [120, 56, 34]),
+        part(sphGeo(0.85, 0.1, 0, 0.48, 5, 8), [130, 62, 38]),
+        part(cylGeo(1.3, 0.6, 0.15, 0.03, 0.04, 0.8, 5), [90, 44, 26]),
+        part(cylGeo(1.3, 0.6, -0.15, 0.03, 0.04, 0.8, 5), [90, 44, 26])
+      ], i;
+      for (i = 0; i < 6; i++) {
+        var sd = i < 3 ? 1 : -1, k = i % 3;
+        ps.push(part(cylGeo(-0.3 + k * 0.4, -0.5 + lg * 0.12 * (k % 2 ? 1 : -1), sd * 0.6,
+                            0.04, 0.05, 0.85, 5), [95, 46, 28]));
+      }
+      obj(g, mergeC(ps), 0.3, t * 0.0013, 0, 26, 1); }],
+
+    ['Spider', function (g, t) {
+      var i, ps = [
+        part(sphGeo(-0.5, 0, 0, 0.75, 6, 9), [50, 44, 56]),
+        part(sphGeo(0.55, 0.05, 0, 0.45, 5, 8), [62, 54, 68])
+      ];
+      for (i = 0; i < 8; i++) {
+        var sd = i < 4 ? 1 : -1, k = i % 4;
+        var a = -0.5 + k * 0.35, lift = Math.sin(t * 0.006 + i) * 0.2;
+        ps.push(part(cylGeo(Math.cos(a) * 0.9, 0.2 + lift, sd * 0.8, 0.05, 0.06, 1.0, 5), [56, 48, 62]));
+        ps.push(part(cylGeo(Math.cos(a) * 1.5, -0.4 + lift, sd * 1.4, 0.04, 0.05, 1.0, 5), [50, 44, 56]));
+      }
+      ps.push(part(sphGeo(0.85, 0.2, 0.18, 0.09, 4, 6), [220, 60, 60]));
+      ps.push(part(sphGeo(0.85, 0.2, -0.18, 0.09, 4, 6), [220, 60, 60]));
+      obj(g, mergeC(ps), 0.34, t * 0.0009, 0, 26, 1); }],
+
+    ['Telescope', function (g, t) {
+      var m = geo('tele', function () { return mergeC([
+        part(cylGeo(0, 0.4, 0, 0.36, 0.5, 2.6, 12, 'x'), [60, 66, 82]),
+        part(cylGeo(1.5, 0.4, 0, 0.28, 0.3, 0.5, 12, 'x'), [180, 186, 200]),
+        part(cylGeo(-1.5, 0.4, 0, 0.22, 0.24, 0.5, 10, 'x'), [40, 44, 56]),
+        part(cylGeo(0, -0.9, 0, 0.14, 0.2, 1.4, 8), [140, 146, 160]),
+        part(cylGeo(0, -1.6, 0, 0.9, 0.95, 0.16, 12), [90, 96, 110])
+      ]); });
+      obj(g, m, 0.2 + Math.sin(t * 0.0009) * 0.25, t * 0.0011, 0, 26, 1); }],
+
+    ['Microscope', function (g, t) {
+      var m = geo('micro', function () { return mergeC([
+        part(boxGeo(0, -1.35, 0, 1.0, 0.16, 0.7), [70, 76, 90]),
+        part(cylGeo(-0.5, -0.2, 0, 0.16, 0.2, 2.2, 8), [110, 116, 130]),
+        part(cylGeo(0.15, 0.75, 0, 0.22, 0.24, 1.3, 10), [50, 56, 70]),
+        part(boxGeo(0.15, -0.55, 0, 0.55, 0.08, 0.55), [180, 186, 200]),
+        part(cylGeo(0.15, -0.15, 0, 0.1, 0.18, 0.6, 8), [40, 44, 56]),
+        part(cylGeo(-0.5, 0.3, 0, 0.3, 0.3, 0.3, 10, 'x'), [200, 180, 90])
+      ]); });
+      obj(g, m, 0.2, t * 0.0011, 0, 26, 1); }],
+
+    ['Camera', function (g, t) {
+      var m = geo('cam', function () { return mergeC([
+        part(boxGeo(0, 0, 0, 1.2, 0.75, 0.5), [50, 52, 60]),
+        part(boxGeo(0, 0.85, 0, 0.45, 0.2, 0.4), [60, 62, 72]),
+        part(cylGeo(0, 0, 0.75, 0.42, 0.5, 0.6, 12, 'z'), [30, 32, 40]),
+        part(cylGeo(0, 0, 1.05, 0.3, 0.32, 0.1, 12, 'z'), [120, 190, 220]),
+        part(cylGeo(-0.75, 0.85, 0, 0.14, 0.14, 0.2, 8), [200, 60, 60])
+      ]); });
+      obj(g, m, 0.22, t * 0.0012, 0, 28, 1); }],
+
+    ['Guitar', function (g, t) {
+      var m = geo('gtr', function () {
+        var ps = [
+          part(cylGeo(0, -0.6, 0, 1.0, 1.0, 0.28, 14), [190, 110, 50]),
+          part(cylGeo(0, 0.35, 0, 0.75, 0.75, 0.28, 14), [190, 110, 50]),
+          part(cylGeo(0, -0.6, 0.2, 0.34, 0.34, 0.06, 12), [40, 30, 20]),
+          part(boxGeo(0, 1.5, 0, 0.2, 0.9, 0.14), [110, 70, 40]),
+          part(boxGeo(0, 2.5, 0, 0.28, 0.16, 0.16), [80, 52, 30])
+        ], i;
+        for (i = 0; i < 5; i++)
+          ps.push(part(boxGeo(-0.16 + i * 0.08, 0.6, 0.2, 0.012, 1.6, 0.012), [225, 225, 230]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.14, t * 0.0012, 0, 24, 1); }],
+
+    ['Piano keys', function (g, t) {
+      var i, ps = [];
+      for (i = 0; i < 12; i++) {
+        var hit = Math.sin(t * 0.006 + i * 0.9) > 0.85;
+        ps.push(part(boxGeo((i - 5.5) * 0.32, -0.4 - (hit ? 0.08 : 0), 0, 0.14, 0.08, 0.8),
+                     [244, 242, 236]));
+      }
+      for (i = 0; i < 12; i++) {
+        if (i % 7 === 2 || i % 7 === 6) continue;
+        var hit2 = Math.sin(t * 0.006 + i * 0.9 + 1) > 0.9;
+        ps.push(part(boxGeo((i - 5) * 0.32, -0.22 - (hit2 ? 0.08 : 0), -0.25, 0.08, 0.1, 0.45),
+                     [30, 30, 36]));
+      }
+      ps.push(part(boxGeo(0, -0.66, 0, 2.0, 0.16, 0.9), [90, 60, 40]));
+      obj(g, mergeC(ps), 0.5, 0.25 + Math.sin(t * 0.0005) * 0.2, 0, 28, 1); }],
+
+    ['Drum kit', function (g, t) {
+      var b1 = Math.abs(Math.sin(t * 0.006)), b2 = Math.abs(Math.sin(t * 0.009 + 1));
+      var ps = [
+        part(cylGeo(0, -0.8, 0, 1.0, 1.0, 1.0, 14, 'z'), [190, 60, 60]),
+        part(cylGeo(-0.9, 0.3, 0.3, 0.45, 0.45, 0.5, 12), [200, 70, 70]),
+        part(cylGeo(0.9, 0.3, 0.3, 0.4, 0.4, 0.45, 12), [200, 70, 70]),
+        part(cylGeo(-1.5, 0.9 + b1 * 0.06, -0.4, 0.7, 0.7, 0.05, 14), [220, 190, 80]),
+        part(cylGeo(1.5, 1.0 + b2 * 0.06, -0.4, 0.6, 0.6, 0.05, 14), [220, 190, 80]),
+        part(cylGeo(-1.5, 0.2, -0.4, 0.05, 0.05, 1.4, 6), [140, 146, 160]),
+        part(cylGeo(1.5, 0.3, -0.4, 0.05, 0.05, 1.4, 6), [140, 146, 160])
+      ];
+      obj(g, mergeC(ps), 0.24, 0.35 + Math.sin(t * 0.0005) * 0.2, 0, 24, 1); }],
+
+    ['Trumpet', function (g, t) {
+      var i, ps = [
+        part(cylGeo(-1.2, 0, 0, 0.16, 0.16, 1.6, 10, 'x'), [220, 180, 70]),
+        part(cylGeo(0.6, 0, 0, 0.16, 0.7, 1.4, 12, 'x'), [230, 190, 80]),
+        part(cylGeo(-2.1, 0, 0, 0.24, 0.14, 0.3, 10, 'x'), [200, 165, 65])
+      ];
+      for (i = 0; i < 3; i++) {
+        var press = Math.sin(t * 0.007 + i * 2) > 0.6 ? 0.12 : 0;
+        ps.push(part(cylGeo(-0.8 + i * 0.4, 0.35 - press, 0, 0.1, 0.1, 0.55, 8), [190, 155, 60]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.0012, 0, 26, 1); }],
+
+    ['Chessboard', function (g, t) {
+      var m = geo('board', function () {
+        var ps = [], x, z;
+        for (x = 0; x < 8; x++) for (z = 0; z < 8; z++)
+          ps.push(part(boxGeo((x - 3.5) * 0.42, -0.5, (z - 3.5) * 0.42, 0.21, 0.06, 0.21),
+                       (x + z) % 2 ? [240, 232, 214] : [70, 52, 40]));
+        ps.push(part(boxGeo(0, -0.62, 0, 1.85, 0.08, 1.85), [110, 78, 52]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.5 + Math.sin(t * 0.0006) * 0.2, t * 0.0009, 0, 27, 0); }],
+
+    ['Abacus', function (g, t) {
+      var i, k, ps = [
+        part(boxGeo(0, 1.4, 0, 1.7, 0.1, 0.16), [130, 90, 50]),
+        part(boxGeo(0, -1.4, 0, 1.7, 0.1, 0.16), [130, 90, 50]),
+        part(boxGeo(-1.6, 0, 0, 0.1, 1.5, 0.16), [130, 90, 50]),
+        part(boxGeo(1.6, 0, 0, 0.1, 1.5, 0.16), [130, 90, 50])
+      ];
+      for (i = 0; i < 5; i++) {
+        var y = 1.0 - i * 0.5;
+        ps.push(part(cylGeo(0, y, 0, 0.03, 0.03, 3.1, 5, 'x'), [180, 186, 200]));
+        for (k = 0; k < 6; k++) {
+          var slide = Math.sin(t * 0.001 + i * 1.3) * 0.5;
+          ps.push(part(sphGeo(-1.3 + k * 0.42 + slide, y, 0, 0.16, 4, 7),
+                       k % 2 ? [220, 80, 70] : [230, 190, 70]));
+        }
+      }
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0005) * 0.4, 0, 26, 0); }],
+
+    ['Balance scales', function (g, t) {
+      var tip = Math.sin(t * 0.0018) * 0.28;
+      var ps = [
+        part(cylGeo(0, -1.0, 0, 0.9, 1.0, 0.14, 12), [150, 120, 60]),
+        part(cylGeo(0, 0.1, 0, 0.09, 0.12, 2.2, 8), [170, 140, 70])
+      ];
+      var bx = Math.cos(tip) * 1.5, by = Math.sin(tip) * 1.5;
+      ps.push(part(boxGeo(0, 1.2, 0, 1.5 * Math.cos(tip), 0.06 + Math.abs(Math.sin(tip)) * 1.4, 0.06),
+                   [190, 160, 80]));
+      ps.push(part(cylGeo(bx, 1.2 + by - 0.55, 0, 0.45, 0.4, 0.1, 12), [210, 180, 90]));
+      ps.push(part(cylGeo(-bx, 1.2 - by - 0.55, 0, 0.45, 0.4, 0.1, 12), [210, 180, 90]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.3, 0, 27, 0); }],
+
+    ['Anvil', function (g, t) {
+      var hit = (t % 1600) < 200;
+      var m = geo('anvil', function () { return mergeC([
+        part(boxGeo(0, -0.9, 0, 0.9, 0.25, 0.6), [60, 62, 72]),
+        part(boxGeo(0, -0.35, 0, 0.35, 0.35, 0.3), [70, 72, 84]),
+        part(boxGeo(0, 0.25, 0, 1.2, 0.3, 0.55), [86, 88, 100]),
+        part(cylGeo(1.5, 0.25, 0, 0.02, 0.28, 0.7, 8, 'x'), [80, 82, 94])
+      ]); });
+      obj(g, m, 0.2, 0.5, 0, 28, 1);
+      var hm = mergeC([
+        part(boxGeo(0, 0, 0, 0.35, 0.22, 0.22), [150, 152, 165]),
+        part(cylGeo(0, 0.9, 0, 0.09, 0.09, 1.4, 6), [140, 100, 55])
+      ]);
+      var V = hm.V.map(function (p) {
+        var a = hit ? -0.2 : -1.1;
+        return [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a) + 1.2, p[2]];
+      });
+      obj(g, { V: V, F: hm.F, C: hm.C }, 0.2, 0.5, 0, 28, 1); }],
+
+    ['Ladder', function (g, t) {
+      var m = geo('ladder', function () {
+        var ps = [
+          part(boxGeo(-0.7, 0, 0, 0.1, 2.2, 0.1), [190, 145, 80]),
+          part(boxGeo(0.7, 0, 0, 0.1, 2.2, 0.1), [190, 145, 80])
+        ], i;
+        for (i = 0; i < 7; i++)
+          ps.push(part(boxGeo(0, -1.8 + i * 0.6, 0, 0.72, 0.06, 0.08), [210, 165, 95]));
+        return mergeC(ps);
+      });
+      obj(g, m, 0.15, t * 0.0013, 0.1, 26, 1); }],
+
+    ['Teapot', function (g, t) {
+      var m = geo('pot', function () { return mergeC([
+        part(sphGeo(0, 0, 0, 1.1, 8, 12), [230, 235, 240]),
+        part(cylGeo(0, 1.0, 0, 0.4, 0.5, 0.3, 12), [215, 220, 228]),
+        part(sphGeo(0, 1.35, 0, 0.22, 5, 7), [200, 90, 90]),
+        part(cylGeo(1.75, 0.5, 0, 0.09, 0.3, 1.5, 8, 'x'), [225, 230, 236]),
+        part(cylGeo(-1.7, 0.2, 0, 0.13, 0.13, 1.5, 8), [225, 230, 236]),
+        part(cylGeo(-1.45, 0.9, 0, 0.75, 0.13, 0.13, 8, 'x'), [225, 230, 236]),
+        part(cylGeo(-1.45, -0.5, 0, 0.7, 0.13, 0.13, 8, 'x'), [225, 230, 236])
+      ]); });
+      obj(g, m, 0.2, t * 0.0013, 0, 26, 0); }],
+
+    ['Wine glass', function (g, t) {
+      var m = geo('glass', function () { return mergeC([
+        part(cylGeo(0, -1.3, 0, 0.85, 0.9, 0.1, 14), [225, 232, 238]),
+        part(cylGeo(0, -0.55, 0, 0.08, 0.08, 1.4, 8), [230, 236, 242]),
+        part(cylGeo(0, 0.45, 0, 0.85, 0.2, 1.2, 14), [220, 230, 238]),
+        part(cylGeo(0, 0.25, 0, 0.6, 0.24, 0.6, 14), [150, 40, 60])
+      ]); });
+      obj(g, m, 0.14, t * 0.0014, 0, 28, 0); }],
+
+    ['Bottle', function (g, t) {
+      var m = geo('bottle', function () { return mergeC([
+        part(cylGeo(0, -0.7, 0, 0.7, 0.72, 1.6, 12), [60, 130, 90]),
+        part(cylGeo(0, 0.35, 0, 0.25, 0.7, 0.6, 12), [60, 130, 90]),
+        part(cylGeo(0, 1.0, 0, 0.24, 0.24, 0.8, 10), [55, 120, 84]),
+        part(cylGeo(0, 1.45, 0, 0.26, 0.26, 0.2, 10), [180, 140, 70]),
+        part(boxGeo(0, -0.7, 0.73, 0.5, 0.5, 0.02), [235, 230, 210])
+      ]); });
+      obj(g, m, 0.16, t * 0.0013, 0, 28, 0); }],
+
+    ['Lantern', function (g, t) {
+      var fl = 0.8 + Math.sin(t * 0.012) * 0.2;
+      var ps = [
+        part(cylGeo(0, -1.1, 0, 0.6, 0.65, 0.2, 10), [80, 70, 50]),
+        part(cylGeo(0, 1.05, 0, 0.35, 0.6, 0.25, 10), [80, 70, 50]),
+        part(cylGeo(0, 1.45, 0, 0.06, 0.06, 0.5, 6), [110, 96, 66]),
+        part(sphGeo(0, -0.1, 0, 0.3 * fl, 5, 8), [255, 210 * fl, 90])
+      ], i;
+      for (i = 0; i < 4; i++) {
+        var a = i * TAU / 4 + Math.PI / 4;
+        ps.push(part(cylGeo(Math.cos(a) * 0.5, 0, Math.sin(a) * 0.5, 0.05, 0.05, 2.0, 5), [90, 78, 56]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.001, 0, 28, 0); }],
+
+    ['Sundial', function (g, t) {
+      var m = geo('sund', function () { return mergeC([
+        part(cylGeo(0, -0.9, 0, 1.6, 1.7, 0.2, 16), [200, 194, 176]),
+        part(cylGeo(0, -1.4, 0, 0.5, 0.7, 0.8, 10), [170, 164, 148])
+      ]); });
+      obj(g, m, 0.62, t * 0.0004, 0, 28, 0);
+      var gn = mergeC([part(boxGeo(0, 0, 0, 0.06, 0.9, 0.9), [140, 120, 70])]);
+      var V = gn.V.map(function (p) { return [p[0], p[1] - 0.35, p[2] - 0.2]; });
+      obj(g, { V: V, F: gn.F, C: gn.C }, 0.62, t * 0.0004, 0, 28, 0);
+      var i, V2 = [], E = [];
+      for (i = 0; i < 12; i++) {
+        var a = i * TAU / 12;
+        V2.push([Math.cos(a) * 1.2, -0.7, Math.sin(a) * 1.2]);
+        V2.push([Math.cos(a) * 1.55, -0.7, Math.sin(a) * 1.55]);
+        E.push([i * 2, i * 2 + 1]);
+      }
+      wire(g, xform(V2, 0.62, t * 0.0004, 0), E, 28, '120,110,80', 1.4); }],
+
+    ['Weather vane', function (g, t) {
+      var a = t * 0.0012 + Math.sin(t * 0.0026) * 0.5;
+      var ps = [
+        part(cylGeo(0, -0.7, 0, 0.09, 0.14, 2.6, 8), [90, 92, 100]),
+        part(cylGeo(0, 0.75, 0, 0.14, 0.14, 0.14, 8), [140, 146, 160])
+      ], i;
+      for (i = 0; i < 4; i++) {
+        var aa = i * TAU / 4;
+        ps.push(part(boxGeo(Math.cos(aa) * 0.9, 0.4, Math.sin(aa) * 0.9, 0.06, 0.06, 0.06),
+                     [190, 190, 200]));
+      }
+      var vm = mergeC([
+        part(boxGeo(0.7, 0, 0, 0.7, 0.05, 0.35), [60, 62, 74]),
+        part(boxGeo(-0.85, 0, 0, 0.35, 0.05, 0.5), [60, 62, 74])
+      ]);
+      var V = vm.V.map(function (p) {
+        return [p[0] * Math.cos(a) - p[2] * Math.sin(a), p[1] + 1.15,
+                p[0] * Math.sin(a) + p[2] * Math.cos(a)];
+      });
+      ps.push({ V: V, F: vm.F, c: [70, 72, 84] });
+      obj(g, mergeC(ps.map(function (p) { return p.c ? p : p; })), 0.16, 0.4, 0, 26, 1); }],
+
+    ['Fire hydrant', function (g, t) {
+      var m = geo('hyd', function () { return mergeC([
+        part(cylGeo(0, -1.2, 0, 0.85, 0.95, 0.3, 12), [180, 40, 34]),
+        part(cylGeo(0, -0.1, 0, 0.55, 0.7, 2.0, 12), [200, 48, 40]),
+        part(cylGeo(0, 1.1, 0, 0.3, 0.55, 0.4, 12), [180, 40, 34]),
+        part(sphGeo(0, 1.45, 0, 0.28, 5, 8), [210, 55, 46]),
+        part(cylGeo(0.75, 0.2, 0, 0.22, 0.26, 0.5, 8, 'x'), [190, 44, 38]),
+        part(cylGeo(-0.75, 0.2, 0, 0.22, 0.26, 0.5, 8, 'x'), [190, 44, 38])
+      ]); });
+      obj(g, m, 0.16, t * 0.0013, 0, 28, 1); }],
+
+    ['Trestle bridge', function (g, t) {
+      var m = geo('brid', function () {
+        var ps = [part(boxGeo(0, 0.3, 0, 2.6, 0.08, 0.6), [150, 110, 66])], i;
+        for (i = 0; i < 5; i++) {
+          var x = -2.0 + i * 1.0;
+          ps.push(part(boxGeo(x, -0.5, 0.5, 0.07, 0.85, 0.07), [120, 88, 52]));
+          ps.push(part(boxGeo(x, -0.5, -0.5, 0.07, 0.85, 0.07), [120, 88, 52]));
+          if (i < 4) {
+            ps.push(part(boxGeo(x + 0.5, 0.85, 0.55, 0.55, 0.05, 0.05), [140, 102, 60]));
+            ps.push(part(boxGeo(x + 0.5, 0.85, -0.55, 0.55, 0.05, 0.05), [140, 102, 60]));
+          }
+          ps.push(part(boxGeo(x, 0.6, 0.55, 0.05, 0.32, 0.05), [140, 102, 60]));
+          ps.push(part(boxGeo(x, 0.6, -0.55, 0.05, 0.32, 0.05), [140, 102, 60]));
+        }
+        return mergeC(ps);
+      });
+      obj(g, m, 0.24, t * 0.0009, 0, 26, 1); }]
+
+  ];
+
   /* ================================================================ */
 
   var CHANNELS = [
@@ -5569,6 +6995,12 @@
         }
       });
     }(ani));
+  }
+
+  for (var gb = 0; gb < G3B.length; gb++) {
+    (function (i) {
+      CHANNELS.push({ name: G3B[i][0], draw: G3B[i][1] });
+    }(gb));
   }
 
   for (var mi2 = 0; mi2 < MISC.length; mi2++) {
