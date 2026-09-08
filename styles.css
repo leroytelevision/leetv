@@ -115,6 +115,14 @@ html { overflow: hidden; }
   :root { --anchor-x: 0.444; }
 }
 
+/* Phone held sideways: the photograph has more headroom than footroom,
+   so the default anchor leaves the set sitting low — roughly 49px of
+   space above it and 15px below. Nudging the anchor down the image
+   lifts the set to sit evenly in the frame. */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root { --anchor-y: 0.558; }
+}
+
 /* --- sound control ------------------------------------------------ */
 
 .sound {
