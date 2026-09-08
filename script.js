@@ -3470,6 +3470,7 @@
     if (!bag.length) refillBag();
     current = bag.pop();
     burstUntil = performance.now() + 300;             /* switching snow */
+    MUSIC.setChannel(current, CHANNELS[current].name);
     announce();
     if (rafId === null) apply();                      /* redraw when frozen */
   }
@@ -3594,6 +3595,243 @@
     ctx.putImageData(image, 0, 0);
   }
 
+
+  /* ================================================================
+     CHIPTUNE — 8-bit new wave, synthesised in the browser.
+
+     No audio files: pulse waves are built as PeriodicWaves from the
+     Fourier series of a square pulse, drums from filtered noise. Each
+     channel seeds a PRNG from its own index, so every one of the 171
+     gets its own key, mode, tempo, progression, bassline, arpeggio,
+     lead motif and drum pattern — deterministically, so a channel
+     always sounds the same.
+
+     Scheduling uses the lookahead pattern: a coarse JS timer queues
+     notes slightly ahead on the audio clock, which is sample-accurate.
+     setTimeout alone is far too jittery to sequence against.
+     ================================================================ */
+
+  var MUSIC = (function () {
+    var ctx = null, master = null, delayNode = null, comp = null;
+    var noiseBuf = null, waves = {};
+    var timer = null, enabled = false;
+    var track = null, nextTime = 0, step = 0;
+    var LOOKAHEAD = 0.12, TICK = 25;
+
+    var SCALES = [
+      [0, 2, 3, 5, 7, 8, 10],   /* aeolian */
+      [0, 2, 3, 5, 7, 9, 10],   /* dorian */
+      [0, 1, 3, 5, 7, 8, 10],   /* phrygian */
+      [0, 2, 3, 5, 7, 8, 11],   /* harmonic minor */
+      [0, 2, 4, 5, 7, 9, 10],   /* mixolydian */
+      [0, 2, 4, 6, 7, 9, 11]    /* lydian */
+    ];
+    var PROGS = [
+      [0, 5, 3, 4], [0, 3, 4, 4], [0, 6, 5, 4], [0, 4, 5, 3],
+      [0, 2, 3, 4], [5, 3, 0, 4], [0, 5, 1, 4], [3, 4, 0, 0]
+    ];
+
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        var t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function buildTrack(i, name) {
+      var seed = (i + 1) * 2654435761 ^ (name ? name.length * 8191 : 0);
+      var r = mulberry32(seed);
+      var pick = function (arr) { return arr[(r() * arr.length) | 0]; };
+      var scale = pick(SCALES);
+      var t = {
+        bpm: 112 + ((r() * 5) | 0) * 10,          /* 112 - 152 */
+        root: 45 + ((r() * 12) | 0),              /* A2 upward */
+        scale: scale,
+        prog: pick(PROGS),
+        duty: [0.5, 0.25, 0.125][(r() * 3) | 0],
+        leadDuty: [0.5, 0.25, 0.125][(r() * 3) | 0],
+        cutoff: 700 + r() * 2200,
+        arpUp: r() < 0.68,
+        arpRate: r() < 0.5 ? 2 : 1,               /* 8ths or 16ths */
+        bassStyle: (r() * 3) | 0,
+        drumStyle: (r() * 4) | 0,
+        hatRate: r() < 0.5 ? 2 : 1,
+        lead: [], leadOct: r() < 0.45 ? 2 : 1,
+        delayOn: r() < 0.6
+      };
+      var k;
+      for (k = 0; k < 32; k++) {                  /* 2-bar motif in 8ths */
+        t.lead.push(r() < 0.42 ? -1 : ((r() * 7) | 0));
+      }
+      return t;
+    }
+
+    function pulseWave(duty) {
+      var key = 'p' + duty;
+      if (waves[key]) return waves[key];
+      var n = 24, real = new Float32Array(n + 1), imag = new Float32Array(n + 1);
+      for (var k = 1; k <= n; k++) imag[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+      waves[key] = ctx.createPeriodicWave(real, imag);
+      return waves[key];
+    }
+
+    function freq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+    function chord(t, degIdx, oct) {
+      var out = [], s = t.scale, i;
+      for (i = 0; i < 3; i++) {
+        var idx = degIdx + i * 2;
+        out.push(t.root + s[idx % s.length] + (oct + Math.floor(idx / s.length)) * 12);
+      }
+      return out;
+    }
+
+    function voice(time, f, dur, duty, gain, dest, glide) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.setPeriodicWave(pulseWave(duty));
+      o.frequency.setValueAtTime(f, time);
+      if (glide) o.frequency.exponentialRampToValueAtTime(f * glide, time + dur);
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.linearRampToValueAtTime(gain, time + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+      o.connect(g); g.connect(dest);
+      o.start(time); o.stop(time + dur + 0.03);
+    }
+
+    function bass(time, f, dur) {
+      var o = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f, time);
+      fl.type = 'lowpass';
+      fl.frequency.setValueAtTime(track.cutoff, time);
+      fl.Q.value = 6;
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.linearRampToValueAtTime(0.30, time + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+      o.connect(fl); fl.connect(g); g.connect(master);
+      o.start(time); o.stop(time + dur + 0.03);
+    }
+
+    function noise(time, dur, type, hz, gain, q) {
+      var s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noiseBuf;
+      fl.type = type; fl.frequency.value = hz; if (q) fl.Q.value = q;
+      g.gain.setValueAtTime(gain, time);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+      s.connect(fl); fl.connect(g); g.connect(master);
+      s.start(time); s.stop(time + dur + 0.02);
+    }
+
+    function kick(time) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(150, time);
+      o.frequency.exponentialRampToValueAtTime(44, time + 0.11);
+      g.gain.setValueAtTime(0.6, time);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
+      o.connect(g); g.connect(master);
+      o.start(time); o.stop(time + 0.2);
+    }
+
+    function playStep(s, time) {
+      var t = track, bar = ((s / 16) | 0) % 4, k = s % 16;
+      var deg = t.prog[bar];
+      var ch = chord(t, deg, 0);
+      var beat = 60 / t.bpm, sixteenth = beat / 4;
+
+      /* bass: driving eighths, the spine of the thing */
+      if (t.bassStyle === 0 ? k % 2 === 0 : t.bassStyle === 1 ? (k % 4 === 0 || k % 8 === 6) : k % 2 === 0)
+        bass(time, freq(ch[0] - 12 + (k % 8 === 6 ? 12 : 0)), sixteenth * 1.7);
+
+      /* arpeggio */
+      if (k % t.arpRate === 0) {
+        var ai = ((k / t.arpRate) | 0) % 3;
+        var note = ch[t.arpUp ? ai : 2 - ai] + 12;
+        voice(time, freq(note), sixteenth * 1.4, t.duty, 0.075, master);
+      }
+
+      /* lead motif over two bars */
+      if (k % 2 === 0) {
+        var li = (((s / 2) | 0) % 32);
+        var d = t.lead[li];
+        if (d >= 0) {
+          var ln = t.root + t.scale[d % t.scale.length] + 12 * t.leadOct;
+          voice(time, freq(ln), sixteenth * 2.6, t.leadDuty, 0.10,
+                t.delayOn ? delayNode : master);
+        }
+      }
+
+      /* drums */
+      if (t.drumStyle === 0 ? (k === 0 || k === 8) :
+          t.drumStyle === 1 ? (k === 0 || k === 6 || k === 10) :
+          t.drumStyle === 2 ? (k === 0 || k === 3 || k === 8) : (k % 8 === 0)) kick(time);
+      if (k === 4 || k === 12) noise(time, 0.14, 'bandpass', 1900, 0.30, 1.2);
+      if (k % (t.hatRate * 2) === 0) noise(time, 0.035, 'highpass', 7200, 0.10);
+    }
+
+    function scheduler() {
+      if (!ctx || !track) return;
+      var beat = 60 / track.bpm, sixteenth = beat / 4;
+      while (nextTime < ctx.currentTime + LOOKAHEAD) {
+        playStep(step, nextTime);
+        nextTime += sixteenth;
+        step = (step + 1) % 64;
+      }
+    }
+
+    function init() {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+      comp = ctx.createDynamicsCompressor();
+      master = ctx.createGain();
+      master.gain.value = 0.22;
+      delayNode = ctx.createDelay(1.0);
+      delayNode.delayTime.value = 0.26;
+      var fb = ctx.createGain(); fb.gain.value = 0.32;
+      delayNode.connect(fb); fb.connect(delayNode);
+      delayNode.connect(master);
+      master.connect(comp); comp.connect(ctx.destination);
+
+      var n = ctx.sampleRate, buf = ctx.createBuffer(1, n, n), d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      noiseBuf = buf;
+      return true;
+    }
+
+    return {
+      supported: function () { return !!(window.AudioContext || window.webkitAudioContext); },
+      isOn: function () { return enabled; },
+      setChannel: function (i, name) {
+        track = buildTrack(i, name);
+        step = 0;
+        if (ctx) {
+          nextTime = ctx.currentTime + 0.06;
+          if (enabled) noise(ctx.currentTime + 0.01, 0.18, 'highpass', 1200, 0.22);
+        }
+      },
+      toggle: function () {
+        if (!ctx && !init()) return false;
+        enabled = !enabled;
+        if (enabled) {
+          if (ctx.state === 'suspended') ctx.resume();
+          var beat = 60 / track.bpm;
+          nextTime = ctx.currentTime + 0.08;
+          step = 0;
+          timer = window.setInterval(scheduler, TICK);
+        } else {
+          window.clearInterval(timer); timer = null;
+          if (ctx.state === 'running') ctx.suspend();
+        }
+        return enabled;
+      },
+      pause: function () { if (ctx && enabled && ctx.state === 'running') ctx.suspend(); },
+      resume: function () { if (ctx && enabled && ctx.state === 'suspended') ctx.resume(); }
+    };
+  }());
+
   /* --- drive ------------------------------------------------------ */
 
   var reduce = window.matchMedia
@@ -3651,6 +3889,27 @@
     });
   }
 
+  var soundBtn = document.getElementById('sound');
+  if (soundBtn) {
+    if (!MUSIC.supported()) {
+      soundBtn.disabled = true;
+      soundBtn.setAttribute('aria-label', 'Sound not supported in this browser');
+    } else {
+      soundBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var on = MUSIC.toggle();
+        soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        soundBtn.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
+      });
+    }
+  }
+
+  /* the audio clock keeps running in a hidden tab otherwise */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) MUSIC.pause(); else MUSIC.resume();
+  });
+
+  MUSIC.setChannel(current, CHANNELS[current].name);
   announce();
   apply();
 })();

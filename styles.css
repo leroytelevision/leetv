@@ -115,6 +115,55 @@ html { overflow: hidden; }
   :root { --anchor-x: 0.444; }
 }
 
+/* --- sound control ------------------------------------------------ */
+
+.sound {
+  position: fixed;
+  z-index: 3;
+  right: 3vmin;
+  bottom: 3vmin;
+  width: 7vmin;
+  height: 7vmin;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  border-radius: 50%;
+  background: rgba(16, 6, 12, 0.72);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 3.2vmin;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-backdrop-filter: blur(4px);
+          backdrop-filter: blur(4px);
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+
+.sound__glyph { display: block; transform: translateY(-2%); }
+
+/* struck through while muted, so the state reads at a glance */
+.sound::after {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 2px;
+  transform: rotate(-45deg);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.sound[aria-pressed="true"] {
+  color: #ff3399;
+  border-color: #ff3399;
+  background: rgba(60, 4, 30, 0.7);
+  box-shadow: 0 0 12px rgba(255, 51, 153, 0.55);
+}
+
+.sound[aria-pressed="true"]::after { display: none; }
+
+.sound:focus-visible { outline: 3px solid #ff3399; outline-offset: 3px; }
+
 /* --- screen ------------------------------------------------------- */
 
 .screen {
