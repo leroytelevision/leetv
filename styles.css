@@ -40,6 +40,7 @@
      source photograph). */
   --anchor-x: 0.492;
   --anchor-y: 0.52;
+  --lift: 0px;          /* extra upward nudge, per breakpoint */
 
   /* screen cut-out, as a fraction of the photograph */
   --screen-left:   29.8913%;   /* 880 / 2944 */
@@ -80,7 +81,7 @@ html { overflow: hidden; }
      the stage actually overflows. Without the clamp a barely-oversized
      stage leaves a sliver of background showing. */
   left: clamp(calc(-1 * var(--ox)), calc(50vw - var(--anchor-x) * var(--sw)), 0px);
-  top:  clamp(calc(-1 * var(--oy)), calc(50vh - var(--anchor-y) * var(--sh)), 0px);
+  top:  clamp(calc(-1 * var(--oy)), calc(50vh - var(--anchor-y) * var(--sh) - var(--lift)), 0px);
   z-index: 1;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -120,7 +121,15 @@ html { overflow: hidden; }
    space above it and 15px below. Nudging the anchor down the image
    lifts the set to sit evenly in the frame. */
 @media (orientation: landscape) and (max-height: 500px) {
-  :root { --anchor-y: 0.558; }
+  /* The lift is bounded by the photograph's bottom edge: once the
+     stage bottom reaches the viewport bottom the clamp holds it there,
+     or background would show. About 15px is reachable at native scale;
+     the request for 30 is clamped to that rather than clipping the
+     cabinet or breaking full-bleed. */
+  :root {
+    --anchor-y: 0.558;
+    --lift: 30px;
+  }
 }
 
 /* --- sound control ------------------------------------------------ */
