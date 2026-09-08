@@ -141,6 +141,18 @@ html { overflow: hidden; }
 
 .sound__glyph { display: block; transform: translateY(-2%); }
 
+/* Bigger on touch devices — 30% up on the desktop size, which also
+   clears the 44px minimum touch target. */
+@media (max-width: 640px), (pointer: coarse) {
+  .sound {
+    width: 9.1vmin;
+    height: 9.1vmin;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 4.2vmin;
+  }
+}
+
 /* struck through while muted, so the state reads at a glance */
 .sound::after {
   content: "";

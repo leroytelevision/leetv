@@ -3612,27 +3612,19 @@
      ================================================================ */
 
   var MUSIC = (function () {
-    var ctx = null, master = null, delayNode = null, delayFb = null, comp = null;
+    var ctx = null, master = null, delayNode = null, delayFb = null, delayWet = null, comp = null;
     var noiseBuf = null, waves = {};
     var timer = null, enabled = false;
     var track = null, nextTime = 0, step = 0;
-    var LOOKAHEAD = 0.07, TICK = 20, MASTER_VOL = 0.22;
+    var LOOKAHEAD = 0.04, TICK = 12, MASTER_VOL = 0.22;
+    var live = [];                                  /* sounding nodes */
 
     var SCALES = [
-      [0, 2, 3, 5, 7, 8, 10],   /* aeolian */
-      [0, 2, 3, 5, 7, 9, 10],   /* dorian */
-      [0, 1, 3, 5, 7, 8, 10],   /* phrygian */
-      [0, 2, 3, 5, 7, 8, 11],   /* harmonic minor */
-      [0, 2, 4, 5, 7, 9, 10],   /* mixolydian */
-      [0, 2, 4, 6, 7, 9, 11]    /* lydian */
+      [0, 2, 3, 5, 7, 8, 10], [0, 2, 3, 5, 7, 9, 10], [0, 1, 3, 5, 7, 8, 10],
+      [0, 2, 3, 5, 7, 8, 11], [0, 2, 4, 5, 7, 9, 10], [0, 2, 4, 6, 7, 9, 11]
     ];
 
-    /* Archetypes, not free parameters. Randomising every knob
-       independently averages out — every track ends up the same
-       texture at a different tempo. Each style fixes a feel, a
-       density and a register; the seed then varies within it. */
-    /* Everything sits under 92bpm. The faster styles keep their drive
-       by subdividing (16th arps) rather than by tempo. */
+    /* All under 92bpm; the busier styles subdivide instead. */
     var STYLES = [
       { bpm:[84,90],  feel:1, swing:0,    arp:2, hats:2, leadOct:1, bassOct:-1, lead:'pulse', drop:1 },
       { bpm:[78,88],  feel:0, swing:0,    arp:1, hats:1, leadOct:2, bassOct:-1, lead:'pulse', drop:0 },
@@ -3647,34 +3639,30 @@
     ];
 
     var PROGS = [
-      [0, 5, 3, 4], [0, 3, 4, 4], [0, 6, 5, 4], [0, 4, 5, 3],
-      [0, 2, 3, 4], [5, 3, 0, 4], [0, 5, 1, 4], [3, 4, 0, 0],
-      [0, 0, 5, 5], [0, 4, 0, 5], [0, 1, 0, 6], [5, 4, 3, 4]
+      [0,5,3,4],[0,3,4,4],[0,6,5,4],[0,4,5,3],[0,2,3,4],[5,3,0,4],
+      [0,5,1,4],[3,4,0,0],[0,0,5,5],[0,4,0,5],[0,1,0,6],[5,4,3,4]
     ];
 
-    /* onset grids, so melodies have rhythm instead of scattering */
-    var RHYTHMS = [
-      [1,0,0,0, 1,0,1,0, 1,0,0,0, 1,0,0,0],
-      [1,0,1,0, 0,1,0,0, 1,0,1,0, 0,0,1,0],
-      [1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0],
-      [1,1,0,0, 1,0,0,0, 0,1,1,0, 1,0,0,0],
-      [0,0,1,0, 1,0,0,1, 0,0,1,0, 1,0,0,0],
-      [1,0,0,0, 0,0,1,0, 0,1,0,0, 1,0,1,0]
+    /* Denser onset grids than before — the lead is meant to carry the
+       tune, so it needs notes to sing with. */
+    var LEADRHY = [
+      [1,0,1,0, 1,0,0,1, 0,1,0,0, 1,0,1,0],
+      [1,0,0,1, 1,0,1,0, 1,0,0,1, 0,1,0,0],
+      [1,1,0,1, 0,1,0,0, 1,0,1,1, 0,1,0,0],
+      [1,0,1,1, 0,1,1,0, 1,0,1,0, 1,1,0,0],
+      [1,0,0,0, 1,1,0,1, 0,1,1,0, 1,0,1,0],
+      [1,0,1,0, 0,1,1,0, 1,0,0,1, 1,0,0,0]
     ];
 
     var KITS = [
-      { kick:[0,8],        snare:[4,12], ghost:0 },
-      { kick:[0,6,10],     snare:[4,12], ghost:1 },
-      { kick:[0,3,8,11],   snare:[4,12], ghost:0 },
-      { kick:[0,8],        snare:[8],    ghost:0 },
-      { kick:[0,10],       snare:[4,12], ghost:1 },
-      { kick:[0,7,8],      snare:[12],   ghost:0 }
+      { kick:[0,8], snare:[4,12], ghost:0 }, { kick:[0,6,10], snare:[4,12], ghost:1 },
+      { kick:[0,3,8,11], snare:[4,12], ghost:0 }, { kick:[0,8], snare:[8], ghost:0 },
+      { kick:[0,10], snare:[4,12], ghost:1 }, { kick:[0,7,8], snare:[12], ghost:0 }
     ];
 
     var BASSF = [
-      function (k) { return k % 2 === 0; },                      /* 8ths */
-      function (k) { return k % 2 === 0; },
-      function (k) { return k % 4 === 0; },                      /* half */
+      function (k) { return k % 2 === 0; }, function (k) { return k % 2 === 0; },
+      function (k) { return k % 4 === 0; },
       function (k) { return k===0||k===3||k===6||k===8||k===11||k===14; }
     ];
 
@@ -3687,36 +3675,45 @@
       };
     }
 
-    function makeMotif(r) {
-      var rh = RHYTHMS[(r() * RHYTHMS.length) | 0];
-      var deg = (r() * 5) | 0, out = [], i;
-      for (i = 0; i < 16; i++) {
-        if (!rh[i]) { out.push(-1); continue; }
-        /* mostly stepwise, occasional leap — a contour, not a scatter */
-        var move = r() < 0.66 ? (r() < 0.5 ? -1 : 1) : (r() < 0.5 ? -3 : 3);
-        deg += move;
-        if (deg < 0) deg += 4;
-        if (deg > 9) deg -= 4;
-        out.push(deg);
+    /* Four bars of tune: an arc per bar so phrases rise and fall, and
+       a note length that runs to the next onset so lines are legato
+       rather than a string of equal blips. */
+    function makeMelody(r) {
+      var rhA = LEADRHY[(r() * LEADRHY.length) | 0];
+      var rhB = LEADRHY[(r() * LEADRHY.length) | 0];
+      var arc = [0, 1, 2, 1], deg = 2 + ((r() * 3) | 0);
+      var notes = [], bar, i;
+      for (bar = 0; bar < 4; bar++) {
+        var rh = (bar % 2 === 0) ? rhA : rhB;
+        for (i = 0; i < 16; i++) {
+          if (!rh[i]) { notes.push(-1); continue; }
+          deg += r() < 0.74 ? (r() < 0.5 ? -1 : 1) : (r() < 0.5 ? -2 : 2);
+          var target = 2 + arc[bar] * 2;
+          if (deg > target + 4) deg -= 2;
+          if (deg < target - 3) deg += 2;
+          notes.push(deg);
+        }
       }
-      return out;
+      var dur = [], n;
+      for (i = 0; i < 64; i++) {
+        if (notes[i] < 0) { dur.push(0); continue; }
+        n = 1;
+        while (n < 8 && notes[(i + n) % 64] < 0) n++;
+        dur.push(n);
+      }
+      return { n: notes, d: dur };
     }
 
     function buildTrack(i, name) {
       var seed = (i + 1) * 2654435761 ^ (name ? name.length * 8191 : 0);
       var r = mulberry32(seed);
       var st = STYLES[i % STYLES.length];
-      var motif = makeMotif(r);
-      var motifB = motif.map(function (d) {          /* answering phrase */
-        return d < 0 ? -1 : d + (r() < 0.5 ? 2 : -2);
-      });
-      var prog = st.vamp ? [0, 0, 5, 5] : PROGS[(r() * PROGS.length) | 0];
       return {
         st: st,
         bpm: st.bpm[0] + ((r() * (st.bpm[1] - st.bpm[0] + 1)) | 0),
         root: 45 + ((r() * 12) | 0),
         scale: SCALES[(r() * SCALES.length) | 0],
-        prog: prog,
+        prog: st.vamp ? [0, 0, 5, 5] : PROGS[(r() * PROGS.length) | 0],
         kit: KITS[(r() * KITS.length) | 0],
         bassOn: BASSF[st.feel],
         duty: [0.5, 0.25, 0.125][(r() * 3) | 0],
@@ -3725,7 +3722,7 @@
         sweep: r() < 0.5 ? 0 : 900 + r() * 1800,
         arpUp: r() < 0.62,
         arpSpan: r() < 0.4 ? 4 : 3,
-        motif: motif, motifB: motifB,
+        mel: makeMelody(r),
         delayOn: r() < 0.55,
         delayTime: 0.18 + r() * 0.22,
         octJump: r() < 0.35
@@ -3741,33 +3738,51 @@
       return waves[key];
     }
 
-    function freq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+    function freq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
     function chord(t, degIdx, oct) {
-      var out = [], s = t.scale, i;
+      var out = [], sc = t.scale, i;
       for (i = 0; i < 4; i++) {
         var idx = degIdx + i * 2;
-        out.push(t.root + s[idx % s.length] + (oct + Math.floor(idx / s.length)) * 12);
+        out.push(t.root + sc[idx % sc.length] + (oct + Math.floor(idx / sc.length)) * 12);
       }
       return out;
     }
 
+    /* A source that is merely silenced still runs; keeping handles lets
+       a cut actually stop them. Ended nodes are pruned as we go. */
+    function hold(node, until) {
+      live.push({ n: node, t: until });
+      if (live.length > 96) {
+        var now = ctx.currentTime, keep = [], i;
+        for (i = 0; i < live.length; i++) if (live[i].t > now) keep.push(live[i]);
+        live = keep;
+      }
+    }
+
+    function killAll(when) {
+      for (var i = 0; i < live.length; i++) {
+        try { live[i].n.stop(when); } catch (e) { /* already finished */ }
+      }
+      live = [];
+    }
+
     function voice(time, f, dur, kind, duty, gain, dest, vib) {
       var o = ctx.createOscillator(), g = ctx.createGain();
-      if (kind === 'tri') o.type = 'triangle';
-      else o.setPeriodicWave(pulseWave(duty));
+      if (kind === 'tri') o.type = 'triangle'; else o.setPeriodicWave(pulseWave(duty));
       o.frequency.setValueAtTime(f, time);
       if (vib) {
         var lfo = ctx.createOscillator(), la = ctx.createGain();
         lfo.frequency.value = 5.5; la.gain.value = f * vib / 1200;
         lfo.connect(la); la.connect(o.frequency);
-        lfo.start(time); lfo.stop(time + dur + 0.03);
+        lfo.start(time); lfo.stop(time + dur + 0.03); hold(lfo, time + dur + 0.03);
       }
       g.gain.setValueAtTime(0.0001, time);
-      g.gain.linearRampToValueAtTime(gain, time + 0.006);
+      g.gain.linearRampToValueAtTime(gain, time + 0.008);
+      g.gain.setValueAtTime(gain, time + dur * 0.55);
       g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
       o.connect(g); g.connect(dest);
-      o.start(time); o.stop(time + dur + 0.03);
+      o.start(time); o.stop(time + dur + 0.03); hold(o, time + dur + 0.03);
     }
 
     function bass(time, f, dur, t) {
@@ -3779,10 +3794,10 @@
       if (t.sweep) fl.frequency.exponentialRampToValueAtTime(Math.max(200, t.cutoff), time + dur);
       fl.Q.value = 6;
       g.gain.setValueAtTime(0.0001, time);
-      g.gain.linearRampToValueAtTime(0.30, time + 0.008);
+      g.gain.linearRampToValueAtTime(0.28, time + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
       o.connect(fl); fl.connect(g); g.connect(master);
-      o.start(time); o.stop(time + dur + 0.03);
+      o.start(time); o.stop(time + dur + 0.03); hold(o, time + dur + 0.03);
     }
 
     function noise(time, dur, type, hz, gain, q) {
@@ -3792,7 +3807,7 @@
       g.gain.setValueAtTime(gain, time);
       g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
       s.connect(fl); fl.connect(g); g.connect(master);
-      s.start(time); s.stop(time + dur + 0.02);
+      s.start(time); s.stop(time + dur + 0.02); hold(s, time + dur + 0.02);
     }
 
     function kick(time) {
@@ -3803,47 +3818,57 @@
       g.gain.setValueAtTime(0.6, time);
       g.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
       o.connect(g); g.connect(master);
-      o.start(time); o.stop(time + 0.2);
+      o.start(time); o.stop(time + 0.2); hold(o, time + 0.2);
     }
 
-    /* Notes are already queued on the audio clock and the delay is
-       still regenerating, so stopping the sequencer alone leaves a
-       tail. Drop the master gain and kill the feedback to cut clean. */
-    function cut(dur) {
+    /* Silence, stop and flush. The delay line holds up to ~400ms of the
+       previous track; muting the wet path stops it re-emerging when the
+       gain comes back. */
+    function cut() {
       if (!ctx) return;
       var now = ctx.currentTime;
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(master.gain.value, now);
-      master.gain.linearRampToValueAtTime(0.0001, now + dur);
+      master.gain.linearRampToValueAtTime(0.0001, now + 0.004);
       delayFb.gain.cancelScheduledValues(now);
       delayFb.gain.setValueAtTime(0, now);
+      delayWet.gain.cancelScheduledValues(now);
+      delayWet.gain.setValueAtTime(0, now);
+      killAll(now + 0.005);
     }
 
-    function restore(at, fb) {
+    function restore(at, dt) {
       master.gain.cancelScheduledValues(at);
       master.gain.setValueAtTime(0.0001, at);
       master.gain.linearRampToValueAtTime(MASTER_VOL, at + 0.02);
-      delayFb.gain.setValueAtTime(fb, at);
+      delayFb.gain.setValueAtTime(0.32, at);
+      /* wet comes back only once the line has drained of the old track */
+      delayWet.gain.setValueAtTime(0, at);
+      delayWet.gain.setValueAtTime(0.85, at + dt + 0.05);
     }
 
     function has(arr, k) { for (var i = 0; i < arr.length; i++) if (arr[i] === k) return true; return false; }
 
+    function snap(deg, chDeg) {
+      var best = deg, bd = 99, i, c;
+      for (i = 0; i < 3; i++) {
+        c = chDeg + i * 2;
+        while (c - deg > 3.5) c -= 7;
+        while (deg - c > 3.5) c += 7;
+        if (Math.abs(c - deg) < bd) { bd = Math.abs(c - deg); best = c; }
+      }
+      return best;
+    }
+
     function playStep(s, time) {
       var t = track, st = t.st;
       var bar = (s / 16) | 0, k = s % 16;
-      var sect = (bar / 4) | 0;                     /* 4 four-bar sections */
+      var sect = (bar / 4) | 0;
       var beat = 60 / t.bpm, sixteenth = beat / 4;
-
-      /* Arrangement varies by subtraction, not by building up: a
-         channel switch resets to step 0, so the opening bars have to
-         sound complete or every switch lands on an empty intro. The
-         lead takes a bar off in four, the arp doubles in later
-         sections, and the drums drop for the final bar of the form. */
-      var wantArp = true;
-      var wantLead = (bar % 4) !== 2;
+      var degIdx = t.prog[bar % t.prog.length];
+      var ch = chord(t, degIdx, 0);
       var wantDrums = !(st.drop && bar === 15);
       var arpRate = (sect === 1 || sect === 3) && st.arp > 1 ? st.arp / 2 : st.arp;
-      var ch = chord(t, t.prog[bar % t.prog.length], 0);
 
       if (t.bassOn(k)) {
         var bn = ch[0] + 12 * st.bassOct;
@@ -3851,39 +3876,40 @@
         bass(time, freq(bn), sixteenth * (st.feel === 2 ? 3.2 : 1.7), t);
       }
 
-      if (wantArp && k % arpRate === 0) {
+      if (k % arpRate === 0) {
         var ai = ((k / arpRate) | 0) % t.arpSpan;
         var an = ch[(t.arpUp ? ai : t.arpSpan - 1 - ai) % 4] + 12;
-        voice(time, freq(an), sixteenth * 1.4, 'pulse', t.duty, 0.07, master, 0);
+        voice(time, freq(an), sixteenth * 1.3, 'pulse', t.duty, 0.05, master, 0);
       }
 
-      if (wantLead && k % 2 === 0) {
-        var half = (bar % 4) < 2 ? t.motif : t.motifB;
-        var li = (((bar % 2) * 8) + (k / 2)) | 0;
-        var d = half[li % 16];
-        if (d >= 0) {
-          var ln = t.root + t.scale[((d % 7) + 7) % 7] + 12 * (st.leadOct + Math.floor(d / 7));
-          voice(time, freq(ln), sixteenth * (st.feel === 2 ? 4 : 2.6), st.lead, t.leadDuty,
-                0.10, t.delayOn ? delayNode : master, st.vib || 0);
-        }
+      /* the tune: every sixteenth is available, held to the next onset,
+         and pulled onto a chord tone on the strong beats */
+      var mi = (bar % 4) * 16 + k;
+      var d = t.mel.n[mi];
+      if (d >= 0) {
+        var dd = (k % 8 === 0) ? snap(d, degIdx) : d;
+        var oct = Math.floor(dd / 7);
+        var ln = t.root + t.scale[((dd % 7) + 7) % 7] + 12 * (st.leadOct + oct);
+        voice(time, freq(ln), sixteenth * t.mel.d[mi] * 0.92, st.lead, t.leadDuty,
+              0.135, t.delayOn ? delayNode : master, st.vib || 0);
       }
 
       if (wantDrums) {
         if (has(t.kit.kick, k)) kick(time);
-        if (has(t.kit.snare, k)) noise(time, 0.14, 'bandpass', 1900, 0.30, 1.2);
-        if (t.kit.ghost && (k === 7 || k === 15)) noise(time, 0.05, 'bandpass', 2400, 0.10, 1.2);
-        if (st.hats && k % st.hats === 0) noise(time, 0.035, 'highpass', 7200, 0.09);
+        if (has(t.kit.snare, k)) noise(time, 0.14, 'bandpass', 1900, 0.28, 1.2);
+        if (t.kit.ghost && (k === 7 || k === 15)) noise(time, 0.05, 'bandpass', 2400, 0.09, 1.2);
+        if (st.hats && k % st.hats === 0) noise(time, 0.035, 'highpass', 7200, 0.08);
       }
     }
 
     function scheduler() {
       if (!ctx || !track) return;
-      var beat = 60 / track.bpm, sixteenth = beat / 4;
+      var sixteenth = (60 / track.bpm) / 4;
       var sw = track.st.swing * sixteenth;
       while (nextTime < ctx.currentTime + LOOKAHEAD) {
         playStep(step, nextTime + ((step % 2) ? sw : 0));
         nextTime += sixteenth;
-        step = (step + 1) % 256;                    /* 16-bar form */
+        step = (step + 1) % 256;
       }
     }
 
@@ -3897,8 +3923,9 @@
       delayNode = ctx.createDelay(1.0);
       delayNode.delayTime.value = 0.26;
       delayFb = ctx.createGain(); delayFb.gain.value = 0.32;
+      delayWet = ctx.createGain(); delayWet.gain.value = 0.85;
       delayNode.connect(delayFb); delayFb.connect(delayNode);
-      delayNode.connect(master);
+      delayNode.connect(delayWet); delayWet.connect(master);
       master.connect(comp); comp.connect(ctx.destination);
       var n = ctx.sampleRate, buf = ctx.createBuffer(1, n, n), d = buf.getChannelData(0);
       for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
@@ -3910,17 +3937,18 @@
       supported: function () { return !!(window.AudioContext || window.webkitAudioContext); },
       isOn: function () { return enabled; },
       setChannel: function (i, name) {
+        var wasOn = enabled;
         track = buildTrack(i, name);
         step = 0;
         if (ctx) {
-          if (enabled) cut(0.012);                 /* silence the old track at once */
-          var at = ctx.currentTime + 0.05;
+          if (wasOn) cut();
+          var at = ctx.currentTime + 0.03;
           delayNode.delayTime.setValueAtTime(track.delayTime, at);
-          if (enabled) {
-            restore(at, 0.32);
-            noise(at, 0.16, 'highpass', 1200, 0.20);
+          if (wasOn) {
+            restore(at, track.delayTime);
+            noise(at, 0.14, 'highpass', 1200, 0.18);
           }
-          nextTime = at + 0.02;
+          nextTime = at + 0.01;
         }
       },
       toggle: function () {
@@ -3928,19 +3956,23 @@
         enabled = !enabled;
         if (enabled) {
           if (ctx.state === 'suspended') ctx.resume();
-          if (track) delayNode.delayTime.setValueAtTime(track.delayTime, ctx.currentTime);
-          restore(ctx.currentTime, 0.32);
-          nextTime = ctx.currentTime + 0.06;
+          /* resume() is async: currentTime is still frozen for a moment,
+             so anything scheduled at it lands in a stale past and the
+             ramp is caught half-finished. Offset into the future. */
+          var at = ctx.currentTime + 0.03;
+          if (track) delayNode.delayTime.setValueAtTime(track.delayTime, at);
+          restore(at, track ? track.delayTime : 0.26);
+          nextTime = at + 0.02;
           step = 0;
           timer = window.setInterval(scheduler, TICK);
         } else {
           window.clearInterval(timer); timer = null;
-          cut(0.01);
-          /* suspend only after the ramp has actually run, or the audio
-             clock stops mid-fade and leaves a click */
-          window.setTimeout(function () {
-            if (!enabled && ctx && ctx.state === 'running') ctx.suspend();
-          }, 45);
+          cut();
+          /* Deliberately NOT suspending here. Resuming a context takes
+             a moment to spin the clock back up, which shows up as lag
+             when the sound is switched on again. Muted with no sources
+             running costs next to nothing, and unmuting is instant.
+             The tab-hidden handler still suspends, where lag is fine. */
         }
         return enabled;
       },
