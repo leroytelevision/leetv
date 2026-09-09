@@ -1518,6 +1518,11 @@
      small to win that argument against the skull facet behind it —
      so the skull is laid down first and the face drawn onto it. */
   function drawFace(g, o) {
+    /* A head reads the cursor as something to look at rather than
+       something to be looked at from, so it borrows the gaze matrix
+       for the length of its own drawing and puts the camera back. */
+    var camera = viewM;
+    viewM = lookM;
     var L = o.L;
     var skin = hex2(L.skin), warm = hex2(L.lit), shade = hex2(L.dark);
     var lipc = hex2(L.lip), hairc = hex2(L.hair), iris = hex2(L.eye);
@@ -1543,7 +1548,7 @@
       ps.push(part(xfG(scG(lathe([[0.05, 1.1], [0.56, 1.0], [0.9, 0.7],
                                   [0.99, 0.52], [0.97, 0.42]], 12),
                            0.98, 1.02, 0.92), 0, 0, 0, 0, 0.12 + dy, 0.02), hairc));
-    obj(g, mergeC(ps), 0, ry, rz, sc, 0);
+    var passHead = ps;
 
     /* --- pass two: the face itself, laid on the front -------------- */
     ps = [];
@@ -1590,10 +1595,21 @@
     if (o.sweat)
       ps.push(part(ovalGeo(0.66, 0.6 - o.sweat * 1.6 + dy, 0.4, 0.08, 0.11, 0.08, 3, 6),
                    [170, 210, 235]));
-    obj(g, mergeC(ps), 0, ry, rz, sc, 0);
+    var passFace = ps;
 
-    /* --- pass three: the hand, nearest the camera ------------------ */
-    if (o.hand) obj(g, mergeC(handParts(o.hand, skin, warm)), 0, ry * 0.4, rz, sc, 0);
+    /* Spin him past side-on and the face is behind the skull, so the
+       three passes go down back to front instead of front to back. */
+    var toward = facingZ(0, ry, rz) >= 0;
+    if (toward) {
+      obj(g, mergeC(passHead), 0, ry, rz, sc, 0);
+      obj(g, mergeC(passFace), 0, ry, rz, sc, 0);
+      if (o.hand) obj(g, mergeC(handParts(o.hand, skin, warm)), 0, ry * 0.4, rz, sc, 0);
+    } else {
+      if (o.hand) obj(g, mergeC(handParts(o.hand, skin, warm)), 0, ry * 0.4, rz, sc, 0);
+      obj(g, mergeC(passFace), 0, ry, rz, sc, 0);
+      obj(g, mergeC(passHead), 0, ry, rz, sc, 0);
+    }
+    viewM = camera;
   }
 
   /* Salute, nerve pinch, meld: the same hand, placed and splayed
@@ -1652,9 +1668,73 @@
     return [80 + p[0] * k * sc, 60 - p[1] * k * sc, k];
   }
 
+  /* --- the viewer's own angle on the scene ------------------------
+     The cursor does two different jobs depending on what is on.
+
+     For most channels it swings the camera round the scene: sweep
+     across the window and the thing turns the whole way about. That
+     is ORBIT, and it is what xform applies by default.
+
+     Heads are the exception. A face that turns away from you as you
+     approach it is unnerving, so the Vulcan and the fifty animals
+     read the same cursor as a gaze and turn to look straight at it —
+     LOOK, below, which those two renderers swap in for themselves.
+     It stops at sixty degrees: the tube is a hand's width across, so
+     a cursor at the edge of the window is nowhere near side-on from
+     where the picture sits, and a head turned the full ninety shows
+     you an ear instead of a face.
+
+     Both are eased toward, so a flicked mouse arcs round rather than
+     snapping; hold still and it drifts back to square on and leaves
+     the channel to get on with whatever it was doing. */
+
+  var curX = 0, curY = 0;     /* where the pointer is, -1..1 from the tube */
+  var eX = 0, eY = 0;         /* where the easing has got to */
+  var viewM = null;           /* null while square on: skip the maths */
+  var lookM = null;
+  var ORBIT_YAW = Math.PI, ORBIT_PITCH = Math.PI * 0.28;
+  var LOOK_YAW = 1.05, LOOK_PITCH = 0.55;
+  var lastAim = 0;
+
+  /* yaw about the world's up, then pitch about the camera's own
+     side-to-side axis — the order a person's head does it in */
+  function rotM(rx, ry) {
+    if (Math.abs(rx) < 0.002 && Math.abs(ry) < 0.002) return null;
+    var cy = Math.cos(ry), sy = Math.sin(ry);
+    var cx = Math.cos(rx), sx = Math.sin(rx);
+    return [cy, 0, sy,
+            sx * sy, cx, -sx * cy,
+            -cx * sy, sx, cx * cy];
+  }
+
+  function easeView() {
+    if (Date.now() - lastAim > 700) { curX *= 0.92; curY *= 0.92; }
+    eX += (curX - eX) * 0.16;
+    eY += (curY - eY) * 0.16;
+    viewM = rotM(-eY * ORBIT_PITCH, -eX * ORBIT_YAW);
+    lookM = rotM(eY * LOOK_PITCH, eX * LOOK_YAW);
+  }
+
+  function toEye(p) {
+    var m = viewM;
+    return [m[0] * p[0] + m[1] * p[1] + m[2] * p[2],
+            m[3] * p[0] + m[4] * p[1] + m[5] * p[2],
+            m[6] * p[0] + m[7] * p[1] + m[8] * p[2]];
+  }
+
+  /* Where a scene's own +Z ends up once the camera has moved. The
+     heads paint their features onto the skull, which is only the right
+     order while the face is still pointing at us; spin past side-on and
+     the order has to turn over with it. */
+  function facingZ(rx, ry, rz) {
+    var p = rot3([0, 0, 1], rx || 0, ry || 0, rz || 0);
+    return viewM ? toEye(p)[2] : p[2];
+  }
+
   function xform(V, rx, ry, rz) {
     var out = [], i;
-    for (i = 0; i < V.length; i++) out.push(rot3(V[i], rx, ry, rz));
+    if (viewM) for (i = 0; i < V.length; i++) out.push(toEye(rot3(V[i], rx, ry, rz)));
+    else for (i = 0; i < V.length; i++) out.push(rot3(V[i], rx, ry, rz));
     return out;
   }
 
@@ -1680,7 +1760,9 @@
   }
 
   function solid(g, R, F, sc, rgb, edge) {
-    var i, k, order = [];
+    var i, k, order = [], mx = 0, my = 0, mz = 0;
+    for (i = 0; i < R.length; i++) { mx += R[i][0]; my += R[i][1]; mz += R[i][2]; }
+    mx /= R.length || 1; my /= R.length || 1; mz /= R.length || 1;
     for (i = 0; i < F.length; i++) {
       var f = F[i], z = 0;
       for (k = 0; k < f.length; k++) z += R[f[k]][2];
@@ -1695,7 +1777,10 @@
       var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       var cxm = 0, cym = 0, czm = 0;
       for (k = 0; k < fc.length; k++) { cxm += R[fc[k]][0]; cym += R[fc[k]][1]; czm += R[fc[k]][2]; }
-      if (nx * cxm + ny * cym + nz * czm < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      var m = fc.length;
+      if (nx * (cxm / m - mx) + ny * (cym / m - my) + nz * (czm / m - mz) < 0) {
+        nx = -nx; ny = -ny; nz = -nz;
+      }
       var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       var sh = (nx * -0.40 + ny * 0.52 + nz * 0.76) / len;
       sh = 0.30 + Math.max(0, sh) * 0.82;
@@ -1847,7 +1932,8 @@
       var c2 = Math.cos(aw * 0.7), s2 = Math.sin(aw * 0.7);
       var y2 = y * c2 - w2 * s2, w3 = y * s2 + w2 * c2;
       var k = 2.4 / (2.4 + w3);
-      out.push(rot3([x2 * k, y2 * k, z * k], rx, ry, 0));
+      var q = rot3([x2 * k, y2 * k, z * k], rx, ry, 0);
+      out.push(viewM ? toEye(q) : q);
     }
     return out;
   }
@@ -1918,21 +2004,36 @@
   function part(geo, rgb) { return { V: geo.V, F: geo.F, c: rgb }; }
 
   function mergeC(parts) {
-    var V = [], F = [], C = [], i, k;
+    var V = [], F = [], C = [], P = [], fp = [], i, k;
     for (i = 0; i < parts.length; i++) {
       var base = V.length, p = parts[i];
       for (k = 0; k < p.V.length; k++) V.push(p.V[k]);
+      P.push([base, V.length]);
       for (k = 0; k < p.F.length; k++) {
         var f = p.F[k], nf = [], j;
         for (j = 0; j < f.length; j++) nf.push(f[j] + base);
-        F.push(nf); C.push(p.c);
+        F.push(nf); C.push(p.c); fp.push(i);
       }
     }
-    return { V: V, F: F, C: C };
+    return { V: V, F: F, C: C, P: P, fp: fp };
   }
 
-  function solidM(g, R, F, C, sc, edge) {
-    var i, k, order = [];
+  /* Which way is "out"? The winding of the geometry builders is not
+     consistent, so a face normal is oriented by pointing it away from
+     the middle of its own part. Judging it against the world origin
+     instead — as this used to — is right only while the object sits
+     at the centre of the scene, and quietly wrecks the shading of
+     anything parked off to one side. */
+  function solidM(g, R, F, C, sc, edge, P, fp) {
+    var i, k, order = [], cen = null;
+    if (P) {
+      cen = [];
+      for (i = 0; i < P.length; i++) {
+        var sx = 0, sy = 0, sz = 0, n = P[i][1] - P[i][0] || 1;
+        for (k = P[i][0]; k < P[i][1]; k++) { sx += R[k][0]; sy += R[k][1]; sz += R[k][2]; }
+        cen.push([sx / n, sy / n, sz / n]);
+      }
+    }
     for (i = 0; i < F.length; i++) {
       var f = F[i], z = 0;
       for (k = 0; k < f.length; k++) z += R[f[k]][2];
@@ -1947,7 +2048,11 @@
       var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
       var cxm = 0, cym = 0, czm = 0;
       for (k = 0; k < fc.length; k++) { cxm += R[fc[k]][0]; cym += R[fc[k]][1]; czm += R[fc[k]][2]; }
-      if (nx * cxm + ny * cym + nz * czm < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      var o = cen ? cen[fp[idx]] : null, m = fc.length;
+      var dx = cxm / m - (o ? o[0] : 0);
+      var dy = cym / m - (o ? o[1] : 0);
+      var dz = czm / m - (o ? o[2] : 0);
+      if (nx * dx + ny * dy + nz * dz < 0) { nx = -nx; ny = -ny; nz = -nz; }
       var len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
       var sh = (nx * -0.40 + ny * 0.52 + nz * 0.76) / len;
       sh = 0.30 + Math.max(0, sh) * 0.82;
@@ -1965,7 +2070,7 @@
 
   /* draw a composed object with one rotation */
   function obj(g, m, rx, ry, rz, sc, edge) {
-    solidM(g, xform(m.V, rx, ry, rz), m.F, m.C, sc, edge);
+    solidM(g, xform(m.V, rx, ry, rz), m.F, m.C, sc, edge, m.P, m.fp);
   }
 
   /* --- a wider vocabulary of parts --------------------------------
@@ -2631,6 +2736,8 @@
      that have to win over both. Sorting by average depth cannot keep a
      nostril in front of a snout, so the order is made explicit. */
   function drawAnimal(g, o) {
+    var camera = viewM;         /* see drawFace: heads look, they do not orbit */
+    viewM = lookM;
     var fur = hex2(o.fur), lit = hex2(o.lit), dk = hex2(o.dark);
     var belly = hex2(o.belly), nosec = hex2(o.nose);
     /* the stock ear brown only suits a brown animal; everyone else
@@ -2717,7 +2824,7 @@
                          -0.3 + i * 0.2, hy * 1.0, 0.05), [212, 48, 44]));
       ps.push(part(boxGeo(0, hy * 0.98, 0.05, 0.34, 0.09, 0.05), [212, 48, 44]));
     }
-    obj(g, mergeC(ps), 0, o.gaze * 0.35, o.tilt, 40, 0);
+    var passSkull = ps;
 
     /* --- pass two: the face on the front --------------------------- */
     ps = [];
@@ -2781,7 +2888,7 @@
       var drop = (1 - o.eyeOpen) * r * 1.9;
       ps.push(part(boxGeo(px, py + r * 1.05 - drop, pz + r * 0.4, r * 1.0, r * 0.45 + drop, r * 0.7), fur));
     }
-    obj(g, mergeC(ps), 0, o.gaze * 0.35, o.tilt, 40, 0);
+    var passFront = ps;
 
     /* --- pass three: nose, mouth, whiskers ------------------------- */
     ps = [];
@@ -2829,7 +2936,12 @@
       }
     if (o.wattle)
       ps.push(part(ovalGeo(0, ny - 0.34, nz - 0.16, 0.1, 0.2, 0.08, 3, 6), [206, 44, 42]));
-    obj(g, mergeC(ps), 0, o.gaze * 0.35, o.tilt, 40, 0);
+
+    /* turned away from us, the muzzle is behind the skull */
+    var order = facingZ(0, o.gaze * 0.35, o.tilt) >= 0
+      ? [passSkull, passFront, ps] : [ps, passFront, passSkull];
+    for (i = 0; i < 3; i++) obj(g, mergeC(order[i]), 0, o.gaze * 0.35, o.tilt, 40, 0);
+    viewM = camera;
   }
 
   /* Species already used by other channels are deliberately absent:
@@ -3031,10 +3143,10 @@
     g.shadowBlur = 0;
 
     g.globalAlpha = 0.24;
-    obj(g, mergeC([part(boxGeo(0, 0, -9, 7, 5, 0.1), [22, 92, 132])]), 0, 0, 0, 40, 0);
+    obj(g, mergeC([part(boxGeo(0, 0, -4, 16, 12, 0.1), [22, 92, 132])]), 0, 0, 0, 40, 0);
     var ps = [], i;
     for (i = 0; i < 5; i++)
-      ps.push(part(boxGeo(0, 1.6 - ((t * 0.0006 + i * 0.2) % 1) * 3.4, -6, 6, 0.05, 0.05),
+      ps.push(part(boxGeo(0, 1.6 - ((t * 0.0006 + i * 0.2) % 1) * 3.4, -3.5, 12, 0.05, 0.05),
                    [110, 220, 240]));
     obj(g, mergeC(ps), 0, 0, 0, 40, 0);
     g.globalAlpha = 1;
@@ -3053,7 +3165,12 @@
        perspective alone barely shrinks anything at this size, so depth
        is carried by scale as well as by z. */
     var lanes = [[0.68, -2.6, 0.38, 1.5], [-0.7, -0.6, 0.58, 0.9], [0.02, 1.2, 0.82, 0.58]];
-    for (i = 0; i < 3; i++) {
+    var seq = [0, 1, 2];
+    if (viewM) seq.sort(function (a, b) {         /* far lane first, still */
+      return toEye([0, lanes[a][0], lanes[a][1]])[2] - toEye([0, lanes[b][0], lanes[b][1]])[2];
+    });
+    for (var q = 0; q < 3; q++) {
+      i = seq[q];
       var ln = lanes[i], k;
       var x = (((t * 0.00046 * o.speed * ln[3] + i * 0.37) % 1) - 0.5) * 6.4;
       var y = ln[0] + Math.sin(t * 0.002 + i * 2) * 0.16;
@@ -3419,7 +3536,7 @@
                             0.35, 0.05, 0.05), [250, 208, 96]));
       }
       ps.push(part(ovalGeo(0, -0.5 + c * 0.9, -0.6, 0.8, 0.8, 0.8, 6, 12), [252, 214, 92]));
-      ps.push(part(boxGeo(0, -1.3, 0.4, 2.6, 0.5, 0.6), [46, 62, 78]));
+      ps.push(part(boxGeo(0, -1.3, 0.4, 5.5, 0.5, 0.6), [46, 62, 78]));
       obj(g, mergeC(ps), 0.05, 0, 0, 30, 0); }],
     ['Typewriter', function (g, t) {
       var k = Math.floor(t * 0.006) % 12, ps = [], i, j;
@@ -3456,7 +3573,6 @@
         part(torGeo(0, -0.1, 1.0, 0.72, 0.12, 14, 6, 'z'), [150, 154, 162]),
         part(cylGeo(0, 1.2, 0.5, 0.12, 0.12, 0.3, 8, 'z'), [80, 82, 90])
       ]); });
-      obj(g, m, 0.1, 0.5, Math.sin(t * 0.04) * 0.02, 30, 1);
       var ps = [], i;
       for (i = 0; i < 6; i++) {
         var a = t * 0.006 + i * TAU / 6;
@@ -3464,7 +3580,16 @@
                              0.16, 0.14, 0.04, 3, 6),
                      [[228, 90, 90], [96, 160, 226], [244, 232, 120]][i % 3]));
       }
-      obj(g, mergeC(ps), 0.1, 0.5, 0, 30, 0); }],
+      /* the washing sits behind the door, so it goes down after the
+         machine only while the door is the side facing us */
+      var drum = mergeC(ps);
+      if (facingZ(0, 0.5, 0) >= 0) {
+        obj(g, m, 0.1, 0.5, Math.sin(t * 0.04) * 0.02, 30, 1);
+        obj(g, drum, 0.1, 0.5, 0, 30, 0);
+      } else {
+        obj(g, drum, 0.1, 0.5, 0, 30, 0);
+        obj(g, m, 0.1, 0.5, Math.sin(t * 0.04) * 0.02, 30, 1);
+      } }],
 
     ['Blender', function (g, t) {
       var ps = [], i;
@@ -4029,13 +4154,12 @@
         ps.push(part(barGeo((i < 2 ? 1 : -1) * 0.2, -1.5, (i % 2 ? 1 : -1) * 0.2,
                             (i < 2 ? 1 : -1) * 0.2, 1.2, (i % 2 ? 1 : -1) * 0.2, 0.035),
                      [240, 180, 50]));
-      var arm = mergeC([part(boxGeo(0.7, 1.3, 0, 1.6, 0.06, 0.12), [240, 180, 50]),
-                        part(boxGeo(-0.9, 1.3, 0, 0.5, 0.1, 0.14), [80, 82, 90]),
-                        part(barGeo(1.6 + sw * 0.4, 1.28, 0, 1.6 + sw * 0.4, 0.2, 0, 0.015),
-                             [200, 200, 210]),
-                        part(boxGeo(1.6 + sw * 0.4, 0.1, 0, 0.14, 0.12, 0.14), [180, 60, 50])]);
-      obj(g, mergeC(ps), 0.06, sw * 0.5, 0, 30, 0);
-      obj(g, arm, 0.06, sw * 0.5, 0, 30, 0); }],
+      var arm = { P: [part(boxGeo(0.7, 1.3, 0, 1.6, 0.06, 0.12), [240, 180, 50]),
+                      part(boxGeo(-0.9, 1.3, 0, 0.5, 0.1, 0.14), [80, 82, 90]),
+                      part(barGeo(1.6 + sw * 0.4, 1.28, 0, 1.6 + sw * 0.4, 0.2, 0, 0.015),
+                           [200, 200, 210]),
+                      part(boxGeo(1.6 + sw * 0.4, 0.1, 0, 0.14, 0.12, 0.14), [180, 60, 50])] };
+      obj(g, mergeC(ps.concat(arm.P)), 0.06, sw * 0.5, 0, 30, 0); }],
 
     ['Neon sign', function (g, t) {
       var on = Math.sin(t * 0.006) > -0.5, ps = [], i, a;
@@ -4048,7 +4172,7 @@
       for (i = 0; i < 4; i++)
         ps.push(part(boxGeo(wordX[i], 0, 0.1, 0.1, 0.4, 0.06),
                      on ? [110, 230, 250] : [40, 76, 84]));
-      ps.push(part(boxGeo(0, 0, -0.24, 1.45, 1.12, 0.03), [44, 40, 54]));
+      ps.push(part(boxGeo(0, 0, -0.24, 1.6, 1.25, 0.03), [44, 40, 54]));
       obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0006) * 0.3, 0, 32, 0); }],
 
     ['Subway train', function (g, t) {
@@ -4071,7 +4195,7 @@
 
     ['Rain on glass', function (g, t) {
       var ps = [], i;
-      ps.push(part(boxGeo(0, 0, -0.6, 2.4, 1.8, 0.05), [58, 76, 96]));
+      ps.push(part(boxGeo(0, 0, -0.6, 5.2, 3.8, 0.05), [58, 76, 96]));
       for (i = 0; i < 30; i++) {
         var f = (t * 0.0006 * (0.5 + (i % 4) * 0.3) + i * 0.033) % 1;
         var x = ((i * 47 % 89) / 89 - 0.5) * 4.2;
@@ -4356,7 +4480,7 @@
 
     ['Sonar ping', function (g, t) {
       var ps = [], i, k;
-      ps.push(part(boxGeo(0, 0, -1.2, 2.4, 1.8, 0.1), [18, 44, 62]));
+      ps.push(part(boxGeo(0, 0, -1.2, 6.5, 4.8, 0.1), [18, 44, 62]));
       for (k = 0; k < 3; k++) {
         var f = ((t * 0.0006 + k * 0.33) % 1);
         for (i = 0; i < 18; i++) {
@@ -6326,9 +6450,33 @@
     if (label) label.textContent = 'Channel: ' + n;
   }
 
+  /* --- how well this channel is coming in -------------------------
+     Every channel arrives at its own strength, re-rolled on every
+     turn of the dial, so a channel you liked is never quite the same
+     twice — which is how an aerial behaves.
+
+     Zero is the set as it always was, and that is now the worst a
+     channel gets: the dial only ever tunes it clearer from there. The
+     lift goes on the flicker rather than on the signal, so the slow
+     pulse that makes the picture breathe is raised off its floor
+     instead of being scaled away, and the hard glitch dropouts keep
+     their bite. A little of the snow itself calms with it.
+
+     Called clarity rather than lift because four of the scenes have a
+     local `lift` of their own, and a shadowed global is a trap left
+     lying about for later. */
+
+  var CLARITY_MAX = 0.7;
+  var clarity = 0;
+
+  function rollClarity() {
+    clarity = Math.random() * CLARITY_MAX;
+  }
+
   function nextChannel() {
     if (!bag.length) refillBag();
     current = bag.pop();
+    rollClarity();
     burstUntil = performance.now() + 300;             /* switching snow */
     MUSIC.setChannel(current, CHANNELS[current].name);
     announce();
@@ -6362,6 +6510,8 @@
   function render(t, steady) {
     var strobe, splitR, splitB, jitterY, white;
 
+    easeView();
+
     if (steady) {
       strobe = 1; splitR = -1; splitB = 1; jitterY = 0; white = 0;
       rowShift.fill(0); rowTint.fill(0);
@@ -6371,6 +6521,7 @@
       }
       var heavy = t < burstUntil;
       var flick = 0.76 + 0.24 * Math.sin(t / 62);
+      flick += (1 - flick) * clarity;       /* how well this one comes in */
       if (heavy) {
         var roll = Math.random();
         strobe = roll < 0.22 ? 0.10 : (roll < 0.46 ? 1.3 : flick);
@@ -6387,6 +6538,7 @@
       }
       buildBands(heavy);
     }
+    var amp = 196 - clarity * 46;
 
     /* paint what the channel is broadcasting */
     sctx.save();
@@ -6416,7 +6568,7 @@
       var tint = rowTint[y];
 
       for (var x = 0; x < W; x++) {
-        var n = (Math.random() * 196) | 0;
+        var n = (Math.random() * amp) | 0;
         var r = n, g = n, b = n;
 
         if (tint) { g = (g * 0.55) | 0; b = (b * 0.82) | 0; }
@@ -6904,6 +7056,9 @@
   function apply() {
     if (reduce && reduce.matches) {
       stop();
+      recentre();
+      eX = eY = 0;
+      viewM = lookM = null;     /* the frozen frame is square on */
       render(0, true);          /* one frozen, unglitched frame */
     } else {
       start();
@@ -6919,6 +7074,37 @@
     if (document.hidden) stop();
     else apply();
   });
+
+  /* The cursor's offset from the middle of the tube is the angle it
+     asks for, full deflection a little beyond the edge of the set.
+     Reduced motion leaves the camera square on. */
+  var screenEl = document.querySelector('.screen') || stage;
+
+  function aim(e) {
+    if (!screenEl || (reduce && reduce.matches)) { curX = curY = 0; return; }
+    var r = screenEl.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var nx = (e.clientX - (r.left + r.width / 2)) / (r.width * 1.6);
+    var ny = (e.clientY - (r.top + r.height / 2)) / (r.height * 1.6);
+    curX = nx < -1 ? -1 : nx > 1 ? 1 : nx;
+    curY = ny < -1 ? -1 : ny > 1 ? 1 : ny;
+    lastAim = Date.now();
+  }
+
+  function recentre() { curX = curY = 0; }
+
+  if (window.PointerEvent) {
+    window.addEventListener('pointermove', aim, { passive: true });
+    window.addEventListener('pointerdown', aim, { passive: true });
+    /* a finger has no hover, so it lets go of the camera when it lifts */
+    window.addEventListener('pointerup', function (e) {
+      if (e.pointerType && e.pointerType !== 'mouse') recentre();
+    }, { passive: true });
+  } else {
+    window.addEventListener('mousemove', aim, { passive: true });
+  }
+  document.addEventListener('mouseleave', recentre);
+  window.addEventListener('blur', recentre);
 
   if (stage) {
     stage.addEventListener('click', nextChannel);
@@ -6950,6 +7136,7 @@
     if (document.hidden) MUSIC.pause(); else MUSIC.resume();
   });
 
+  rollClarity();
   MUSIC.setChannel(current, CHANNELS[current].name);
   announce();
   apply();
