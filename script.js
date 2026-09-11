@@ -8965,14 +8965,90 @@
     clarity = Math.random() * CLARITY_MAX;
   }
 
+  /* --- the end of the dial ----------------------------------------
+     Six hundred channels is a great deal of television. Get through
+     every one of them in a sitting and the set has a view about it:
+     it collapses to a dot the way a tube does and says so.
+
+     Not remembered between visits. Sitting down to a fresh set and
+     being told off for something you did last week would be a poor
+     joke, and the walk only counts if you take it in one go. */
+
+  var seen = new Uint8Array(CHANNELS.length);
+  var seenCount = 0;
+  var isOff = false, wasPlaying = false, offTimer = null;
+  var offEl = document.getElementById('off');
+
+  function markSeen(i) {
+    if (seen[i]) return;
+    seen[i] = 1;
+    if (++seenCount >= CHANNELS.length) powerOff();
+  }
+
+  function powerOff() {
+    if (isOff) return;
+    isOff = true;
+    wasPlaying = MUSIC.isOn();
+    MUSIC.pause();
+    var sc = document.querySelector('.screen');
+    if (sc) sc.classList.add('is-off');
+    if (offEl) offEl.hidden = false;
+    if (label) label.textContent = 'Go outside. You are watching too much LEETV.';
+    /* let the tube finish collapsing before the loop stops */
+    offTimer = window.setTimeout(function () { offTimer = null; stop(); }, 950);
+  }
+
+  function powerOn() {
+    isOff = false;
+    if (offTimer !== null) { window.clearTimeout(offTimer); offTimer = null; }
+    seen = new Uint8Array(CHANNELS.length);
+    seenCount = 0;
+    var sc = document.querySelector('.screen');
+    if (sc) sc.classList.remove('is-off');
+    if (offEl) offEl.hidden = true;
+    if (wasPlaying) MUSIC.resume();
+    markSeen(current);
+    announce();
+    apply();
+  }
+
   function nextChannel() {
+    if (isOff) { powerOn(); return; }           /* switch it back on */
     if (!bag.length) refillBag();
     current = bag.pop();
     rollClarity();
     burstUntil = performance.now() + 300;             /* switching snow */
     MUSIC.setChannel(current, CHANNELS[current].name);
     announce();
-    if (rafId === null) apply();                      /* redraw when frozen */
+    markSeen(current);
+    if (rafId === null && !isOff) apply();            /* redraw when frozen */
+  }
+
+  /* --- rolling the dial -------------------------------------------
+     A wheel gesture slides the picture out and the next one in, the
+     way a vertical hold slips. It is drawn as a slide rather than
+     transformed after the fact, so the static and the chroma split
+     run over the join exactly as they do over everything else.
+
+     The direction is yours; the destination is not. It still comes
+     off the shuffled bag, so rolling the dial is as random as
+     clicking it — it just looks like you meant it. */
+
+  var slideFrom = -1, slideDir = 1, slideAt = 0, wheelAcc = 0;
+  var SLIDE_MS = 260, WHEEL_STEP = 44;
+
+  function nowMs() {
+    return (window.performance && performance.now) ? performance.now() : Date.now();
+  }
+
+  function rollChannel(dir) {
+    if (isOff) { powerOn(); return; }
+    var was = current;
+    nextChannel();
+    if (current === was) return;
+    slideFrom = was;
+    slideDir = dir;                       /* +1 the picture falls, -1 it rises */
+    slideAt = nowMs();
   }
 
   /* --- per-frame glitch state ------------------------------------- */
@@ -9047,7 +9123,28 @@
       sctx.shadowColor = 'rgba(0,0,0,0.85)';
       sctx.shadowBlur = 3;
     }
-    CHANNELS[current].draw(sctx, steady ? 1400 : t);
+    var sp = -1;
+    if (slideFrom >= 0 && !steady) {
+      sp = (t - slideAt) / SLIDE_MS;
+      if (sp >= 1 || sp < 0) { slideFrom = -1; sp = -1; }
+    } else if (steady) {
+      slideFrom = -1;
+    }
+    if (sp >= 0) {
+      /* ease in and out, so the roll starts and settles rather than
+         running at a constant speed */
+      var e = sp < 0.5 ? 2 * sp * sp : 1 - Math.pow(-2 * sp + 2, 2) / 2;
+      sctx.save();
+      sctx.translate(0, e * H * slideDir);
+      CHANNELS[slideFrom].draw(sctx, t);
+      sctx.restore();
+      sctx.save();
+      sctx.translate(0, -(1 - e) * H * slideDir);
+      CHANNELS[current].draw(sctx, t);
+      sctx.restore();
+    } else {
+      CHANNELS[current].draw(sctx, steady ? 1400 : t);
+    }
     sctx.restore();
     var s = sctx.getImageData(0, 0, W, H).data;
     var hard = !!CHANNELS[current].hard;
@@ -9604,9 +9701,24 @@
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault();
         nextChannel();
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        rollChannel(e.key === 'ArrowDown' ? 1 : -1);
       }
     });
   }
+
+  /* Trackpads send a flurry of small deltas where a mouse sends one
+     big one, so the wheel is accumulated to a threshold rather than
+     acted on tick by tick. */
+  window.addEventListener('wheel', function (e) {
+    if (!e.deltaY) return;
+    if (wheelAcc && (wheelAcc > 0) !== (e.deltaY > 0)) wheelAcc = 0;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) < WHEEL_STEP) return;
+    rollChannel(wheelAcc > 0 ? 1 : -1);
+    wheelAcc = 0;
+  }, { passive: true });
 
   var soundBtn = document.getElementById('sound');
   if (soundBtn) {
@@ -9616,6 +9728,7 @@
     } else {
       soundBtn.addEventListener('click', function (e) {
         e.stopPropagation();
+        if (isOff) return;                            /* the set is off */
         var on = MUSIC.toggle();
         soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
         soundBtn.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
@@ -9631,5 +9744,6 @@
   rollClarity();
   MUSIC.setChannel(current, CHANNELS[current].name);
   announce();
+  markSeen(current);
   apply();
 })();

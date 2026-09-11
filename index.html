@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>LEETV</title>
   <meta name="description" content="599 channels of broadcast static. Click the set to change channel.">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=20">
 
   <!-- Share preview. og:image must be an absolute URL; scrapers do not
        resolve relative paths. JPEG because the screen is static, which
@@ -40,6 +40,13 @@
       <div class="roll"></div>
       <div class="scanlines"></div>
       <div class="glass"></div>
+
+      <!-- Shown once every channel has been watched. The live region
+           above carries the same words for anyone not looking. -->
+      <div class="off" id="off" hidden>
+        <p class="off__big">Go outside.</p>
+        <p class="off__sub">You are watching too much LEETV.</p>
+      </div>
     </div>
 
     <img class="set" src="thetvtouse.png" alt="A pink retro television set on a
@@ -51,6 +58,6 @@
     <span class="sound__glyph" aria-hidden="true">&#9834;</span>
   </button>
 
-  <script src="script.js?v=27"></script>
+  <script src="script.js?v=28"></script>
 </body>
 </html>

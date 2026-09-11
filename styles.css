@@ -268,6 +268,71 @@ html { overflow: hidden; }
       rgba(0, 0, 0, 0.72) 100%);
 }
 
+/* --- the set switching itself off --------------------------------- */
+
+/* The classic tube power-down: the picture collapses to a line, the
+   line to a dot, the dot to nothing. The end state is declared as
+   well as animated, so with motion turned off it simply goes dark
+   rather than staying on. */
+
+@keyframes tv-off {
+  0%   { transform: scale(1, 1);        filter: brightness(1); opacity: 1; }
+  30%  { transform: scale(1, 0.015);    filter: brightness(2.8); opacity: 1; }
+  58%  { transform: scale(0.22, 0.012); filter: brightness(3.6); opacity: 1; }
+  100% { transform: scale(0, 0.008);    filter: brightness(0); opacity: 0; }
+}
+
+.screen.is-off #tube {
+  transform: scale(0, 0.008);
+  opacity: 0;
+  animation: tv-off 900ms cubic-bezier(0.45, 0, 0.2, 1) forwards;
+}
+
+.screen.is-off .roll,
+.screen.is-off .scanlines,
+.screen.is-off .glass { opacity: 0; transition: opacity 0.3s ease; }
+
+.off {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4%;
+  margin: 0;
+  padding: 0 8%;
+  text-align: center;
+  pointer-events: none;
+  /* opacity lives here rather than in the keyframes, so killing the
+     animation reveals the message instead of hiding it forever */
+  opacity: 1;
+  animation: off-in 700ms ease 900ms backwards;
+}
+
+@keyframes off-in {
+  from { opacity: 0; transform: translateY(6%); }
+}
+
+.off__big, .off__sub {
+  margin: 0;
+  font-family: "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  color: #ff3399;
+  text-shadow: 0 0 8px rgba(255, 51, 153, 0.55);
+}
+
+.off__big { font-size: 15%; font-size: clamp(18px, 3.4vmin, 46px); }
+.off__sub {
+  font-size: clamp(9px, 1.5vmin, 20px);
+  color: rgba(255, 214, 234, 0.92);
+  text-shadow: 0 0 6px rgba(255, 51, 153, 0.4);
+}
+
 /* --- reduced motion ----------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
