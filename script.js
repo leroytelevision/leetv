@@ -8970,9 +8970,14 @@
      every one of them in a sitting and the set has a view about it:
      it collapses to a dot the way a tube does and says so.
 
-     Not remembered between visits. Sitting down to a fresh set and
-     being told off for something you did last week would be a poor
-     joke, and the walk only counts if you take it in one go. */
+     Only clicking counts. Rolling the wheel goes through a channel a
+     tick, so a few seconds of enthusiastic scrolling would reach the
+     end of the dial and the joke would land on somebody who had not
+     watched anything at all. You have to sit and press the thing.
+
+     Not remembered between visits either. Sitting down to a fresh set
+     and being told off for something you did last week would be a
+     poor joke, and the walk only counts if you take it in one go. */
 
   var seen = new Uint8Array(CHANNELS.length);
   var seenCount = 0;
@@ -9020,8 +9025,14 @@
     burstUntil = performance.now() + 300;             /* switching snow */
     MUSIC.setChannel(current, CHANNELS[current].name);
     announce();
-    markSeen(current);
     if (rafId === null && !isOff) apply();            /* redraw when frozen */
+  }
+
+  /* what the button does: change channel, and count it as watched */
+  function watchChannel() {
+    if (isOff) { powerOn(); return; }
+    nextChannel();
+    markSeen(current);
   }
 
   /* --- rolling the dial -------------------------------------------
@@ -9696,11 +9707,11 @@
   window.addEventListener('blur', recentre);
 
   if (stage) {
-    stage.addEventListener('click', nextChannel);
+    stage.addEventListener('click', watchChannel);
     stage.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         e.preventDefault();
-        nextChannel();
+        watchChannel();
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         rollChannel(e.key === 'ArrowDown' ? 1 : -1);

@@ -292,6 +292,11 @@ html { overflow: hidden; }
 .screen.is-off .scanlines,
 .screen.is-off .glass { opacity: 0; transition: opacity 0.3s ease; }
 
+/* display:flex on its own would beat the browser's own [hidden] rule,
+   which leaves the message laid out and waiting to be revealed by any
+   stray opacity change */
+.off[hidden] { display: none; }
+
 .off {
   position: absolute;
   inset: 0;
