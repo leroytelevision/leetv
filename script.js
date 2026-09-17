@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------
-   leetv.tv — five hundred and forty-four channels of broadcast,
+   leetv.tv — six hundred and forty-six channels of broadcast,
    all fighting through the same interference.
 
    Every channel is a scene in three dimensions. Geometry is built
@@ -10,12 +10,12 @@
    you would describe them out loud: +X right, +Y up, +Z out of the
    screen towards you.
 
-   Five kinds of channel: geometry that moves, two hundred dynamic
+   Six kinds of channel: geometry that moves, two hundred dynamic
    geometric scenes that rebuild themselves every frame, optical
-   illusions, esoteric emblems, and fifty animals looking at you.
-   The scenes that are not registered are not deleted — the arrays
-   are all still here, and the loops that used to push them are the
-   only thing missing.
+   illusions, esoteric emblems, fifty animals looking at you, and
+   the body taken apart organ by organ. The scenes that are not
+   registered are not deleted — the arrays are all still here, and
+   the loops that used to push them are the only thing missing.
 
    The compositor then rebuilds every pixel out of noise, pulling
    toward the scene colour by the current signal strength, sampling
@@ -11506,6 +11506,2032 @@
   ];
 
 
+  /* ================================================================
+     ORGANS — the body taken to pieces, one part per channel, each
+     of them doing its job with a little too much enthusiasm. The
+     palette stays in the reds, ochres and bone-whites: pale flesh
+     tones wash straight out against the static, so everything here
+     is pitched darker and more saturated than life.
+     ================================================================ */
+
+  var ORGANS = [
+    ['Brain', function (g, t) {
+      /* the gyri crawl: each band of the cortex slides round at its
+         own rate, so the whole surface is always rearranging itself */
+      var ps = [part(ovalGeo(0, 0, 0, 1.05, 0.92, 0.95, 8, 12), [172, 96, 108])];
+      var k, i;
+      for (k = 0; k < 7; k++) {
+        var lat = -0.95 + k * 0.32;
+        var cl = Math.cos(lat), sl = Math.sin(lat);
+        for (i = 0; i < 11; i++) {
+          var a = i / 11 * TAU + Math.sin(k * 1.3 + t * 0.0014) * 0.9 + k;
+          var wob = Math.sin(a * 4 + k * 2 + t * 0.0034) * 0.1;
+          var r = cl * (1.06 + wob);
+          ps.push(part(sphGeo(Math.cos(a) * r, sl * (0.94 + wob),
+                              Math.sin(a) * r * 0.92, 0.17, 3, 6),
+                       k % 2 ? [228, 142, 150] : [198, 104, 118]));
+        }
+      }
+      ps.push(part(barGeo(0, -0.85, 0, 0, -1.6, 0.1, 0.16), [196, 150, 150]));
+      obj(g, mergeC(ps), 0.12, t * 0.0006, 0, 30, 0); }],
+
+    ['Cerebellum', function (g, t) {
+      /* the folia scroll downward like a shutter that never finishes */
+      var ps = [], i, k;
+      for (k = 0; k < 11; k++) {
+        var y = -0.85 + ((k * 0.165 + t * 0.00028) % 1.75);
+        var w = Math.sqrt(Math.max(0.02, 1 - Math.pow((y - 0.05) / 0.95, 2))) * 1.35;
+        for (i = 0; i < 9; i++) {
+          var x = (i / 8 - 0.5) * 2 * w;
+          var z = Math.sqrt(Math.max(0, 1 - (x * x) / (w * w + 0.01))) * 0.75;
+          ps.push(part(ovalGeo(x, y, z, w / 8, 0.07, 0.13, 4, 6),
+                       k % 2 ? [214, 122, 126] : [158, 62, 74]));
+          ps.push(part(ovalGeo(x, y, -z, w / 8, 0.07, 0.13, 4, 6),
+                       k % 2 ? [186, 96, 106] : [140, 52, 66]));
+        }
+      }
+      ps.push(part(ovalGeo(0, 0.05, 0, 1.2, 0.92, 0.66, 10, 13), [128, 44, 58]));
+      ps.push(part(cylGeo(0, 0.7, -0.5, 0.26, 0.26, 0.9, 10), [178, 92, 96]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Brain stem', function (g, t) {
+      /* signals run down it and keep going out the bottom */
+      var ps = [part(lathe([[0.62, 1.5], [0.72, 0.95], [0.5, 0.5], [0.58, 0.0],
+                            [0.42, -0.7], [0.36, -1.6]], 16), [176, 78, 84])], i;
+      for (i = 0; i < 12; i++) {   /* the cranial nerves coming off it */
+        var y = 1.2 - i * 0.22, sd = i % 2 ? 1 : -1;
+        ps.push(part(barGeo(sd * 0.45, y, 0.1, sd * 1.4, y - 0.25, 0.5, 0.07),
+                     [226, 206, 168]));
+      }
+      for (i = 0; i < 7; i++) {    /* the pulse, travelling */
+        var f = ((t * 0.0012 + i * 0.143) % 1);
+        var y2 = 1.5 - f * 3.1;
+        var r = 0.72 - Math.abs(y2) * 0.14;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, r, 0.1, 14, 5), 1, 1, 0.9),
+                         Math.PI / 2, 0, 0, 0, y2, 0),
+                     [110 + (1 - f) * 145, 200, 255]));
+      }
+      obj(g, mergeC(ps), 0.1, t * 0.0007, 0, 30, 0); }],
+
+    ['Spinal cord', function (g, t) {
+      /* a column of discs that whips like a tail it does not have */
+      var ps = [], i, n = 18;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var sw = Math.sin(t * 0.0026 - f * 4) * f * 0.85;
+        var y = 1.5 - f * 3;
+        ps.push(part(xfG(lathe([[0.3, -0.06], [0.42, -0.02], [0.42, 0.02],
+                                [0.3, 0.06]], 10), 0, 0, sw * 0.5,
+                         Math.sin(sw) * 0.9, y, Math.cos(sw * 1.7) * 0.3),
+                     [214, 202, 174]));
+        ps.push(part(sphGeo(Math.sin(sw) * 0.9, y, Math.cos(sw * 1.7) * 0.3 + 0.12,
+                            0.15, 4, 7), [236, 226, 170]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0005) * 0.6, 0, 30, 0); }],
+
+    ['Pituitary gland', function (g, t) {
+      /* a pea on a stem, dripping something it will not explain */
+      var ps = [part(barGeo(0, 1.5, 0, 0, 0.5, 0, 0.13), [186, 140, 132]),
+                part(ovalGeo(-0.18, 0.1, 0, 0.5, 0.42, 0.45, 8, 11), [178, 88, 96]),
+                part(ovalGeo(0.3, 0.14, 0, 0.36, 0.34, 0.36, 7, 10), [206, 128, 118])], i;
+      for (i = 0; i < 6; i++) {
+        var f = ((t * 0.0009 + i * 0.167) % 1);
+        ps.push(part(sphGeo(-0.1 + Math.sin(i * 2.1) * 0.25, -0.3 - f * 1.4,
+                            Math.cos(i * 1.7) * 0.2, 0.12 - f * 0.05, 4, 6),
+                     [230, 196, 90]));
+      }
+      obj(g, mergeC(ps), 0.14, t * 0.0007, 0, 34, 0); }],
+
+    ['Pineal gland', function (g, t) {
+      /* the scales open like a lid, and there is an eye behind them */
+      var open = (Math.sin(t * 0.0013) + 1) / 2;
+      var ps = [part(ovalGeo(0, -0.1, 0, 0.78, 0.9, 0.78, 10, 13), [146, 56, 72])],
+          i, k;
+      for (k = 0; k < 4; k++) for (i = 0; i < 8; i++) {
+        var a = i / 8 * TAU + k * 0.4;
+        var lift = open * (0.35 + k * 0.22);
+        var y = 0.75 - k * 0.42;
+        var R = 0.62 + lift * 0.75;
+        ps.push(part(xfG(scG(sphGeo(0, 0, 0, 1, 4, 7), 0.3, 0.12, 0.22),
+                         -lift * 1.1, -a, 0,
+                         Math.cos(a) * R, y + lift * 0.3, Math.sin(a) * R),
+                     [206, 158, 88]));
+      }
+      ps.push(part(sphGeo(0, 0.05, 0.18, 0.4 * open + 0.06, 9, 12), [236, 240, 244]));
+      ps.push(part(sphGeo(0, 0.05, 0.5, 0.21 * open + 0.03, 7, 10), [24, 40, 88]));
+      ps.push(part(sphGeo(0, 0.05, 0.62, 0.1 * open + 0.02, 5, 8), [12, 12, 18]));
+      obj(g, mergeC(ps), 0.1, t * 0.0005, 0, 30, 0); }],
+
+    ['Hypothalamus', function (g, t) {
+      /* too small for the job, and visibly shaking about it */
+      var j = function (o) { return Math.sin(t * 0.021 + o) * 0.07; };
+      var ps = [part(ovalGeo(j(0), j(2) - 0.1, j(4), 0.6, 0.45, 0.5, 8, 11),
+                     [186, 100, 104])], i;
+      for (i = 0; i < 8; i++) {
+        var a = i / 8 * TAU;
+        ps.push(part(sphGeo(Math.cos(a) * 0.55 + j(i), Math.sin(a) * 0.4 + j(i + 3),
+                            j(i + 6) + 0.2, 0.19, 4, 7), [214, 132, 122]));
+      }
+      ps.push(part(barGeo(j(1), 0.35, 0, 0, 1.3, -0.2, 0.1), [180, 136, 130]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.8, 0, 36, 0); }],
+
+    ['Thalamus', function (g, t) {
+      /* two halves orbiting a gap where the rest of the head should be */
+      var a = t * 0.0015;
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        var cx = sd * Math.cos(a) * 0.78, cy = sd * Math.sin(a * 1.3) * 0.32;
+        var cz = sd * Math.sin(a) * 0.78;
+        ps.push(part(xfG(ovalGeo(0, 0, 0, 0.72, 0.52, 0.58, 9, 12), 0, a, 0,
+                         cx, cy, cz), k ? [190, 74, 90] : [154, 50, 68]));
+        for (i = 0; i < 7; i++) {  /* nuclei showing through */
+          var b = i / 7 * TAU + a;
+          ps.push(part(sphGeo(cx + Math.cos(b) * 0.5, cy + Math.sin(b) * 0.38,
+                              cz + 0.42, 0.13, 4, 6), [226, 176, 120]));
+        }
+      }
+      for (i = 0; i < 12; i++) {   /* the bridge between them */
+        var f = (i / 11 - 0.5) * 2;
+        ps.push(part(sphGeo(Math.cos(a) * 0.78 * f, Math.sin(a * 1.3) * 0.32 * f,
+                            Math.sin(a) * 0.78 * f, 0.11, 3, 6), [232, 208, 180]));
+      }
+      obj(g, mergeC(ps), 0.16, 0, 0, 32, 0); }],
+
+    ['Corpus callosum', function (g, t) {
+      /* the fibres are strummed, one at a time, left to right */
+      var ps = [], i, j, n = 22;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var pl = Math.max(0, Math.sin((t * 0.0022 - f * 3.2) % TAU));
+        for (j = 0; j < 9; j++) {  /* each fibre is an arch, not a slab */
+          var a = Math.PI * (0.08 + (j / 8) * 0.84);
+          var R = 1.3;
+          ps.push(part(sphGeo(Math.cos(a) * R,
+                              Math.sin(a) * R - 0.55 + pl * Math.sin(j / 8 * Math.PI) * 0.4,
+                              (f - 0.5) * 1.7, 0.11 + pl * 0.05, 3, 6),
+                       [236, 226 - pl * 70, 190 - pl * 50]));
+        }
+      }
+      ps.push(part(ovalGeo(0, -0.95, 0, 1.35, 0.3, 0.85, 9, 13), [168, 84, 92]));
+      obj(g, mergeC(ps), 0.12, Math.sin(t * 0.0006) * 0.9, 0, 30, 0); }],
+
+    ['Peripheral nerve', function (g, t) {
+      /* a signal runs the length of it and the branches flinch late */
+      var ps = [], i, k, n = 24;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x = -2 + f * 4;
+        var y = Math.sin(f * 5 + t * 0.0008) * 0.35;
+        var sig = Math.max(0, 1 - Math.abs(((t * 0.0016) % 1.4) - f) * 7);
+        ps.push(part(sphGeo(x, y, 0, 0.26 + sig * 0.16, 5, 8),
+                     [186 + sig * 66, 196 + sig * 50, 140 + sig * 110]));
+        if (i % 4 === 2) for (k = 0; k < 2; k++) {
+          var sd = k ? 1 : -1;
+          var fl = sig * sd * 0.6;
+          ps.push(part(barGeo(x, y, 0, x + 0.2, y + sd * 0.9 + fl, sd * 0.45, 0.1),
+                       [170, 190, 224]));
+          ps.push(part(sphGeo(x + 0.2, y + sd * 0.9 + fl, sd * 0.45, 0.14, 4, 6),
+                       [198, 214, 240]));
+        }
+      }
+      obj(g, mergeC(ps), 0.2, Math.sin(t * 0.0005) * 0.5, 0, 30, 0); }],
+
+    ['Eye', function (g, t) {
+      /* the pupil breathes, and now and then the whole eye divides */
+      var sp = Math.max(0, Math.sin(t * 0.0007)) * 0.85;
+      var pu = 0.2 + (Math.sin(t * 0.0024) + 1) / 2 * 0.3;
+      var ps = [], k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        var cx = sd * sp;
+        ps.push(part(sphGeo(cx, 0, 0, 1.0 - sp * 0.25, 11, 15), [238, 234, 226]));
+        ps.push(part(ovalGeo(cx, 0, 0.82 - sp * 0.2, 0.46, 0.46, 0.22, 8, 12),
+                     [64, 128, 150]));
+        ps.push(part(ovalGeo(cx, 0, 0.94 - sp * 0.22, pu, pu, 0.14, 7, 10),
+                     [14, 14, 22]));
+        ps.push(part(barGeo(cx, 0, -0.9, cx - sd * 0.2, -0.1, -1.7, 0.12),
+                     [226, 208, 176]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0009) * 0.35, 0, 32, 0); }],
+
+    ['Cornea', function (g, t) {
+      /* a clear dome with a ripple crossing it, again and again */
+      var ps = [part(ovalGeo(0, 0, -0.85, 1.25, 1.25, 0.45, 12, 16),
+                     [96, 44, 58])], i, j;
+      for (j = 0; j < 8; j++) for (i = 0; i < 18; i++) {
+        var lat = 0.18 + j / 8 * 1.05, a = i / 18 * TAU;
+        var d = j / 8;
+        var bump = Math.sin(d * 7 - t * 0.0036) * 0.14 * (1 - d * 0.3);
+        var R = 1.3 + bump;
+        ps.push(part(ovalGeo(Math.sin(lat) * Math.cos(a) * R,
+                             Math.sin(lat) * Math.sin(a) * R,
+                             Math.cos(lat) * R * 0.75 - 0.45,
+                             0.14, 0.14, 0.09, 4, 6),
+                     [126 + bump * 500, 196 + bump * 160, 214]));
+      }
+      obj(g, mergeC(ps), 0.24, Math.sin(t * 0.0007) * 0.6, 0, 30, 0); }],
+
+    ['Retina', function (g, t) {
+      /* a bowl of rods and cones, all leaning toward a light
+         that is not in the room */
+      var ps = [], i, j;
+      var lx = Math.sin(t * 0.0013) * 1.2, ly = Math.cos(t * 0.0009) * 0.8;
+      for (j = 1; j < 7; j++) for (i = 0; i < j * 4; i++) {
+        var lat = j / 7 * 1.25, a = i / (j * 4) * TAU;
+        var px = Math.sin(lat) * Math.cos(a) * 1.3;
+        var py = Math.sin(lat) * Math.sin(a) * 1.3;
+        var pz = -Math.cos(lat) * 1.3 + 0.6;
+        var dx = (lx - px) * 0.16, dy = (ly - py) * 0.16;
+        ps.push(part(barGeo(px, py, pz, px + dx, py + dy, pz + 0.3, 0.07),
+                     (i + j) % 3 ? [230, 120, 130] : [250, 214, 120]));
+      }
+      ps.push(part(ovalGeo(0, 0, -0.5, 1.3, 1.3, 0.45, 10, 14), [122, 40, 56]));
+      obj(g, mergeC(ps), 0.2, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Cochlea', function (g, t) {
+      /* the spiral unwinds most of the way and thinks better of it */
+      var un = (Math.sin(t * 0.0009) + 1) / 2 * 0.72;
+      var ps = [], i, n = 42;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = f * TAU * 2.7 * (1 - un * 0.8);
+        var R = (1.45 - f * 0.85) * (1 - un * 0.55);
+        var x = Math.cos(a) * R + un * (f - 0.5) * 3.2;
+        var y = Math.sin(a) * R * 0.92 + un * Math.sin(f * 3.4) * 0.35;
+        var z = (1 - un) * (f * 1.1 - 0.55);
+        ps.push(part(sphGeo(x, y, z, 0.3 - f * 0.14, 5, 8),
+                     [222 - f * 40, 168 - f * 60, 96]));
+      }
+      ps.push(part(sphGeo(Math.cos(0) * 1.45, 0, -0.55, 0.36, 7, 10), [186, 96, 100]));
+      obj(g, mergeC(ps), 0.16, t * 0.0005, 0, 30, 0); }],
+
+    ['Eardrum', function (g, t) {
+      /* struck on a loop, and it never quite stops ringing */
+      var hit = (t % 1300) / 1300;
+      var amp2 = Math.exp(-hit * 6) * Math.sin(hit * 60) * 0.55;
+      var ps = [], i, j;
+      for (j = 1; j < 6; j++) for (i = 0; i < j * 5; i++) {
+        var r = j / 5.5 * 1.3, a = i / (j * 5) * TAU;
+        var z = amp2 * Math.cos(r * 2.2) * (1 - r / 1.6);
+        ps.push(part(boxGeo(Math.cos(a) * r, Math.sin(a) * r, z, 0.12, 0.12, 0.05),
+                     [232, 198, 156]));
+      }
+      ps.push(part(sphGeo(0, 0, amp2 + 0.16, 0.2, 5, 8), [226, 214, 182]));
+      ps.push(part(barGeo(0, 0, amp2 + 0.2, 0.5, 0.8, 1.1, 0.12), [218, 206, 172]));
+      ps.push(part(prismRing(1.42, 0.14, 22, 0.14), [168, 120, 96]));
+      obj(g, mergeC(ps), 0.28, Math.sin(t * 0.0007) * 0.7, 0, 30, 0); }],
+
+    ['Nose', function (g, t) {
+      /* the turbinates scroll like a conveyor and the nostrils flare */
+      var fl = (Math.sin(t * 0.0021) + 1) / 2;
+      var ps = [], i, k, j;
+      for (j = 0; j < 9; j++) {      /* the bridge, built in slices */
+        var f = j / 8;
+        var y = 1.45 - f * 2.5;
+        var w = 0.12 + f * f * (0.62 + fl * 0.18);
+        ps.push(part(ovalGeo(0, y, f * 0.45, w, 0.18, 0.28 + f * 0.4, 6, 9),
+                     [198, 104, 100]));
+      }
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        ps.push(part(ovalGeo(sd * (0.36 + fl * 0.14), -1.0, 0.72,
+                             0.2 + fl * 0.07, 0.14, 0.24, 6, 9), [42, 18, 24]));
+        ps.push(part(ovalGeo(sd * (0.62 + fl * 0.16), -0.85, 0.5,
+                             0.22, 0.3, 0.3, 6, 9), [212, 124, 116]));
+        for (i = 0; i < 5; i++) {    /* turbinates, scrolling */
+          var yy = 0.75 - ((i * 0.3 + t * 0.0008) % 1.6);
+          ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.3, 0.09, 12, 5), 1, 0.45, 1),
+                           0.45, 0, 0, sd * 0.3, yy, 0.1), [226, 128, 132]));
+        }
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Tongue', function (g, t) {
+      /* it goes out further than it has any business going */
+      var out = (Math.sin(t * 0.0011) + 1) / 2;
+      var ps = [], i, n = 22;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var L = 1.9 + out * 2.0;
+        var y = 1.1 - f * L;
+        var curl = Math.sin(f * 3 + t * 0.0018) * (0.25 + out * 0.8);
+        var w = (0.72 - f * 0.4) * (1 - out * 0.2);
+        ps.push(part(ovalGeo(Math.sin(curl) * f * 1.0, y, Math.cos(curl) * 0.25,
+                             w, L / n * 0.95, w * 0.62, 6, 9),
+                     [206, 66, 92]));
+        if (i % 2 === 0)
+          ps.push(part(sphGeo(Math.sin(curl) * f * 1.0, y,
+                              Math.cos(curl) * 0.25 + w * 0.5, 0.1, 3, 6),
+                       [240, 142, 152]));
+      }
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0007) * 0.6, 0, 28, 0); }],
+
+    ['Heart', function (g, t) {
+      /* a double thump, and on the second one it turns itself
+         briefly inside out */
+      var c = (t % 1100) / 1100;
+      var b = Math.exp(-c * 9) + Math.exp(-Math.max(0, c - 0.28) * 11) * 0.7;
+      var inv = Math.max(0, Math.sin(t * 0.0004) - 0.86) * 7;
+      var s2 = 1 + b * 0.16 - inv * 0.5;
+      var ps = [part(scG(ovalGeo(-0.3, -0.1, 0, 0.95, 1.0, 0.85, 10, 14),
+                         s2, s2, s2), [176, 32, 44]),
+                part(scG(ovalGeo(0.45, 0.05, 0, 0.72, 0.85, 0.7, 9, 12),
+                         s2, s2, s2), [200, 52, 58]),
+                part(ovalGeo(-0.55, 0.85, 0, 0.5, 0.4, 0.45, 7, 10), [140, 44, 62]),
+                part(ovalGeo(0.5, 0.9, 0, 0.45, 0.36, 0.42, 7, 10), [150, 52, 68])], i;
+      /* the great vessels, pulsing a beat behind the chambers */
+      ps.push(part(lathe([[0.3, 0.9], [0.34, 1.3], [0.22, 1.7]], 10, -0.2, 0, 0),
+                   [186, 66, 70]));
+      ps.push(part(lathe([[0.26, 0.9], [0.3, 1.4], [0.18, 1.8]], 10, 0.55, 0, -0.2),
+                   [80, 96, 178]));
+      for (i = 0; i < 9; i++) {       /* coronary vessels creeping over it */
+        var a = i / 9 * TAU;
+        ps.push(part(barGeo(Math.cos(a) * 0.2, 0.7, Math.sin(a) * 0.2 + 0.4,
+                            Math.cos(a) * 1.0, -0.6 - Math.sin(i) * 0.3,
+                            Math.sin(a) * 0.5 + 0.5, 0.07), [226, 150, 60]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0.1, 30, 0); }],
+
+    ['Aorta', function (g, t) {
+      /* the pulse climbs the arch and drops off the far end */
+      var ps = [], i, n = 26;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = Math.PI * (1.05 - f * 1.15);
+        var R = 1.15;
+        var x = Math.cos(a) * R, y = Math.sin(a) * R - 0.35;
+        var p = Math.max(0, 1 - Math.abs(((t * 0.0013) % 1.35) - f) * 8);
+        ps.push(part(sphGeo(x, y, 0, 0.3 + p * 0.16, 5, 8),
+                     [180 + p * 70, 40 + p * 30, 50]));
+      }
+      for (i = 0; i < 3; i++)         /* the branches off the top */
+        ps.push(part(barGeo(-0.3 + i * 0.35, 0.75, 0, -0.4 + i * 0.45, 1.7, 0, 0.14),
+                     [170, 44, 54]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Artery', function (g, t) {
+      /* the near wall is cut away so you can watch the pressure work */
+      var ps = [], i, k, n = 15;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x = -2 + f * 4;
+        var pl = Math.max(0, 1 - Math.abs(((t * 0.0015) % 1.3) - f) * 6);
+        var r = 0.6 + pl * 0.35;
+        for (k = 0; k < 8; k++) {    /* back half of the ring only */
+          var a = 0.45 + k / 7 * 4.2;
+          ps.push(part(sphGeo(x, Math.sin(a) * r, Math.cos(a) * r, 0.24, 4, 6),
+                       [162, 40, 52]));
+          if (k % 2 === 0)           /* the lining, picked out in pale */
+            ps.push(part(sphGeo(x, Math.sin(a) * r * 0.74, Math.cos(a) * r * 0.74,
+                                0.16, 3, 5), [230, 150, 138]));
+        }
+        ps.push(part(ovalGeo(x, 0, 0, 0.16, 0.14 + pl * 0.3, 0.14 + pl * 0.3, 5, 8),
+                     [212, 34, 42]));
+      }
+      obj(g, mergeC(ps), 0.24, 0.35 + Math.sin(t * 0.0006) * 0.35, 0, 28, 0); }],
+
+    ['Vein', function (g, t) {
+      /* the valves only open one way, and something keeps testing them */
+      var ps = [], i, k, n = 22;
+      for (i = 0; i < n; i++) {    /* the wall, as a back half-shell */
+        var f = i / n;
+        var y = 1.75 - f * 3.5;
+        for (k = 0; k < 9; k++) {
+          var a = 0.5 + k / 8 * 4.1;
+          ps.push(part(sphGeo(Math.sin(a) * 0.72, y, Math.cos(a) * 0.72, 0.17, 3, 6),
+                       [64, 84, 164]));
+        }
+      }
+      for (i = 0; i < 5; i++) {    /* the cusps */
+        var y2 = 1.4 - i * 0.72;
+        var op = (Math.sin(t * 0.0026 - i * 0.9) + 1) / 2;
+        for (k = 0; k < 2; k++) {
+          var sd = k ? 1 : -1;
+          var j;
+          for (j = 0; j < 6; j++) {
+            var f2 = j / 5;
+            ps.push(part(sphGeo(sd * (0.68 - f2 * (0.62 - op * 0.5)),
+                                y2 + f2 * 0.34, (f2 - 0.5) * 0.7, 0.15, 4, 6),
+                         [166, 182, 232]));
+          }
+        }
+        ps.push(part(sphGeo(0, y2 - 0.36 + ((t * 0.0012 + i * 0.2) % 1) * 0.72, 0,
+                            0.24, 5, 8), [122, 36, 58]));
+      }
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.6, 0, 28, 0); }],
+
+    ['Capillary bed', function (g, t) {
+      /* single cells, one at a time, squeezing through a mesh
+         that is plainly too small for them */
+      var ps = [], i, j;
+      for (j = 0; j < 6; j++) for (i = 0; i < 7; i++) {
+        var x = (i - 3) * 0.44, y = (j - 2.5) * 0.44;
+        if (i < 6) ps.push(part(barGeo(x, y, 0, x + 0.44, y, 0, 0.05), [170, 70, 84]));
+        if (j < 5) ps.push(part(barGeo(x, y, 0, x, y + 0.44, 0, 0.05), [170, 70, 84]));
+      }
+      for (i = 0; i < 10; i++) {
+        var f = ((t * 0.0007 + i * 0.1) % 1);
+        var lane = (i % 6) - 2.5;
+        var sq = Math.abs(Math.sin(f * 14)) * 0.5;
+        ps.push(part(ovalGeo(-1.35 + f * 2.7, lane * 0.44, 0,
+                             0.2 - sq * 0.1, 0.13 + sq * 0.08, 0.16, 5, 8),
+                     [212, 48, 54]));
+      }
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0005) * 0.5, 0, 32, 0); }],
+
+    ['Heart valve', function (g, t) {
+      /* three cusps, slamming shut hard enough that you expect a sound */
+      var c = (t % 900) / 900;
+      var op = c < 0.35 ? c / 0.35 : Math.max(0, 1 - (c - 0.35) / 0.12);
+      var ps = [part(prismRing(1.5, 0.22, 22, 0.16), [212, 190, 150])], i, j, k;
+      for (k = 0; k < 3; k++) {
+        var base = k * TAU / 3;
+        for (j = 0; j < 6; j++) {    /* each cusp is a filled leaf */
+          var fr = j / 5;
+          for (i = 0; i < 7; i++) {
+            var a = base + (i / 6 - 0.5) * 2.05 * (0.35 + fr * 0.65);
+            var r = 1.45 * fr + (1 - fr) * 0.1;
+            ps.push(part(sphGeo(Math.cos(a) * r, Math.sin(a) * r,
+                                (1 - op) * (1 - fr) * 0.75, 0.17, 4, 6),
+                         k === 0 ? [242, 214, 206] : k === 1 ? [232, 200, 194]
+                                                             : [222, 188, 182]));
+          }
+        }
+      }
+      if (op > 0.3) for (i = 0; i < 9; i++) {
+        var f = ((t * 0.0016 + i * 0.111) % 1);
+        ps.push(part(sphGeo(Math.cos(i * 2.4) * 0.45, Math.sin(i * 2.4) * 0.45,
+                            -1.4 + f * 2.8, 0.19, 4, 6), [196, 36, 46]));
+      }
+      obj(g, mergeC(ps), 0.4, Math.sin(t * 0.0006) * 0.5, 0, 28, 0); }],
+
+    ['Left lung', function (g, t) {
+      /* it inflates on its own schedule and the ribs cannot keep up */
+      var br = (Math.sin(t * 0.0012) + 1) / 2;
+      var s2 = 0.85 + br * 0.35;
+      var ps = [part(scG(ovalGeo(-0.15, 0.1, 0, 0.85, 1.35, 0.7, 10, 13),
+                         s2, s2, s2), [176, 66, 78]),
+                part(scG(ovalGeo(-0.1, -0.95, 0, 0.7, 0.55, 0.6, 8, 11),
+                         s2, s2, s2), [152, 50, 64])], i;
+      ps.push(part(barGeo(0.5, 1.5, 0, 0.05, 0.6, 0, 0.16), [226, 206, 178]));
+      for (i = 0; i < 10; i++) {     /* ribs, a beat out of step */
+        var y = 1.3 - i * 0.3;
+        var w = Math.sqrt(Math.max(0.05, 1 - Math.pow(y / 1.7, 2))) * 1.5;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, w, 0.06, 14, 5), 1, 1, 0.55),
+                         Math.PI / 2, 0, 0, -0.1, y + Math.sin(t * 0.0012 + 1) * 0.1, 0),
+                     [218, 210, 186]));
+      }
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Right lung', function (g, t) {
+      /* three lobes, and the top one keeps wandering off */
+      var br = (Math.sin(t * 0.0014 + 2) + 1) / 2;
+      var drift = Math.max(0, Math.sin(t * 0.0005)) * 1.1;
+      var s2 = 0.9 + br * 0.24;
+      var ps = [], i, j;
+      var lobe = [[0.05, 1.0, 0.72, 0.62, 0.6], [0.15, 0.05, 0.86, 0.68, 0.7],
+                  [0.1, -0.95, 0.8, 0.62, 0.66]];
+      for (j = 0; j < 3; j++) {
+        var L = lobe[j];
+        var dy = j === 0 ? drift * 0.7 : 0, dz = j === 0 ? drift * 0.5 : 0;
+        ps.push(part(scG(ovalGeo(L[0], L[1] + dy, dz, L[2], L[3], L[4], 10, 13),
+                         s2, s2, s2),
+                     j === 0 ? [186, 70, 80] : j === 1 ? [162, 54, 68]
+                                                       : [140, 42, 58]));
+        for (i = 0; i < 6; i++) {   /* the fissures, picked out in pale */
+          var a = i / 6 * TAU;
+          ps.push(part(sphGeo(L[0] + Math.cos(a) * L[2] * 0.85 * s2,
+                              L[1] + dy - L[3] * s2 * 0.95,
+                              dz + Math.sin(a) * L[4] * 0.6 * s2, 0.1, 3, 6),
+                       [220, 176, 168]));
+        }
+      }
+      ps.push(part(barGeo(-0.6, 1.8, 0, 0.05, 0.4, 0, 0.18), [226, 206, 178]));
+      ps.push(part(barGeo(0.05, 0.4, 0, 0.05, 1.0 + drift * 0.7, drift * 0.5, 0.12),
+                   [226, 206, 178]));
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.7, 0, 28, 0); }],
+
+    ['Trachea', function (g, t) {
+      /* the rings travel down it like something is being swallowed */
+      var ps = [], i, n = 15;
+      for (i = 0; i < n; i++) {
+        var y = 1.6 - i * 0.24;
+        var sw = Math.sin(t * 0.004 - i * 0.7);
+        var r = 0.55 + Math.max(0, sw) * 0.3;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, r, 0.1, 14, 5), 1, 1, 0.85),
+                         Math.PI / 2, 0, 0, 0, y, 0), [228, 216, 190]));
+      }
+      ps.push(part(lathe([[0.45, 1.75], [0.45, -1.9]], 14), [206, 132, 132]));
+      for (i = 0; i < 2; i++) {
+        var sd = i ? 1 : -1;
+        ps.push(part(barGeo(0, -1.8, 0, sd * 0.8, -2.5, 0, 0.2), [222, 208, 184]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0006) * 0.8, 0, 26, 0); }],
+
+    ['Bronchus', function (g, t) {
+      /* it keeps growing new branches and shedding the old ones */
+      var ps = [], gen = (t * 0.0004) % 1;
+      function br2(x, y, z, dx, dy, dz, len, d) {
+        var nx = x + dx * len, ny = y + dy * len, nz = z + dz * len;
+        ps.push(part(barGeo(x, y, z, nx, ny, nz, 0.26 - d * 0.052),
+                     [224, 140, 138]));
+        ps.push(part(sphGeo(nx, ny, nz, 0.26 - d * 0.052, 4, 7), [206, 116, 118]));
+        if (d >= 3) return;
+        var k, spread = 1.15 + Math.sin(t * 0.0018 + d) * 0.3;
+        for (k = 0; k < 2; k++) {
+          var sd = k ? 1 : -1;
+          var ex = dx * 0.45 + sd * spread;
+          var ey = dy * 0.45 - 0.55;
+          var ez = dz * 0.45 + sd * spread * 0.45 * (d % 2 ? -1 : 1);
+          var L = Math.sqrt(ex * ex + ey * ey + ez * ez);
+          br2(nx, ny, nz, ex / L, ey / L, ez / L, len * (0.68 + gen * 0.08), d + 1);
+        }
+      }
+      br2(0, 1.35, 0, 0, -1, 0, 1.25, 0);
+      obj(g, mergeC(ps), 0.1, t * 0.0006, 0, 30, 0); }],
+
+    ['Alveoli', function (g, t) {
+      /* a bunch of grapes, each one breathing at its own tempo */
+      var ps = [part(barGeo(0, 1.6, 0, 0, 0.5, 0, 0.13), [220, 160, 154])], i, n = 26;
+      for (i = 0; i < n; i++) {
+        var a = i * 2.399, r = Math.sqrt(i / n) * 1.25;
+        var b = 0.5 + 0.5 * Math.sin(t * 0.0026 + i * 1.7);
+        var x = Math.cos(a) * r, y = 0.3 - r * 0.9, z = Math.sin(a) * r;
+        ps.push(part(barGeo(0, 0.5, 0, x, y, z, 0.05), [216, 150, 146]));
+        ps.push(part(sphGeo(x, y, z, 0.2 + b * 0.16, 5, 8),
+                     [222 + b * 30, 110 + b * 60, 126 + b * 40]));
+      }
+      obj(g, mergeC(ps), 0.14, t * 0.0005, 0, 30, 0); }],
+
+    ['Larynx', function (g, t) {
+      /* the folds buzz far faster than anything here should move */
+      var buzz = Math.sin(t * 0.055) * 0.16;
+      var gap = 0.12 + (Math.sin(t * 0.0011) + 1) / 2 * 0.4;
+      var ps = [part(prism([[-0.9, 0.9], [0.9, 0.9], [0.75, -0.3], [0, -0.9],
+                            [-0.75, -0.3]], 0.62), [214, 202, 172])], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 8; i++) {
+          var f = i / 8;
+          ps.push(part(boxGeo(-0.7 + f * 1.4, sd * (gap + buzz * Math.sin(f * 3)), 0.5,
+                              0.1, 0.09, 0.16), [226, 92, 112]));
+        }
+      }
+      ps.push(part(xfG(prism(discO(0.62, 12), 0.1), Math.PI / 2, 0, 0, 0, 1.15, 0),
+                   [228, 214, 186]));
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.7, 0, 32, 0); }],
+
+    ['Pharynx', function (g, t) {
+      /* a tube in the act of swallowing its own length */
+      var ps = [], i, n = 20;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var sq = Math.max(0, Math.sin((t * 0.0016 - f * 2.4) * Math.PI * 2));
+        var r = 0.75 - sq * 0.55;
+        var y = 1.7 - f * 3.4;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, r, 0.13, 14, 5), 1, 1, 0.8),
+                         Math.PI / 2, 0, 0, Math.sin(f * 3) * 0.2, y, 0),
+                     [216, 118, 128]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0007) * 0.8, 0, 28, 0); }],
+
+    ['Epiglottis', function (g, t) {
+      /* it slams shut over and over, guarding nothing in particular */
+      var c = (t % 1500) / 1500;
+      var sh = c < 0.12 ? c / 0.12 : Math.max(0, 1 - (c - 0.12) / 0.5);
+      var ps = [part(xfG(prism([[-0.65, -0.9], [-0.5, 0.7], [0, 0.95],
+                                [0.5, 0.7], [0.65, -0.9]], 0.1),
+                         -0.2 - sh * 1.5, 0, 0, 0, 0.5, 0.55), [230, 168, 132])], i;
+      ps.push(part(lathe([[0.72, 0.45], [0.75, -0.4], [0.6, -1.5]], 14), [206, 120, 126]));
+      for (i = 0; i < 10; i++) {
+        var a = i / 10 * TAU;
+        ps.push(part(sphGeo(Math.cos(a) * 0.74, 0.42, Math.sin(a) * 0.74, 0.13, 3, 6),
+                     [226, 210, 180]));
+      }
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Diaphragm', function (g, t) {
+      /* a trampoline nobody is using */
+      var pu = Math.sin(t * 0.0016);
+      var ps = [], i, j;
+      for (j = 1; j < 7; j++) for (i = 0; i < j * 5; i++) {
+        var r = j / 6.2 * 1.45, a = i / (j * 5) * TAU;
+        var y = pu * 0.55 * Math.cos(r * 1.1) + Math.sin(r * 4 - t * 0.003) * 0.08;
+        ps.push(part(boxGeo(Math.cos(a) * r, y, Math.sin(a) * r, 0.14, 0.06, 0.14),
+                     [190, 62, 70]));
+      }
+      ps.push(part(sphGeo(0, pu * 0.55 + 0.1, 0, 0.22, 5, 8), [212, 96, 90]));
+      for (i = 0; i < 18; i++) {
+        var a2 = i / 18 * TAU;
+        ps.push(part(sphGeo(Math.cos(a2) * 1.55, -0.1, Math.sin(a2) * 1.55,
+                            0.14, 3, 6), [222, 212, 186]));
+      }
+      obj(g, mergeC(ps), 0.5, Math.sin(t * 0.0005) * 0.6, 0, 30, 0); }],
+
+    ['Mouth', function (g, t) {
+      /* it opens further than a jaw allows, then thinks better of it */
+      var op = Math.pow((Math.sin(t * 0.0009) + 1) / 2, 2) * 1.5;
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        var dy = sd > 0 ? 0.35 : -0.35 - op;
+        for (i = 0; i < 13; i++) {
+          var f = i / 12 - 0.5;
+          var x = f * 2.4;
+          var y = dy + sd * Math.cos(f * 2.6) * 0.3;
+          ps.push(part(ovalGeo(x, y, Math.cos(f * 3) * 0.35, 0.14, 0.22, 0.2, 4, 7),
+                       [206, 66, 92]));
+          if (i > 1 && i < 11)
+            ps.push(part(boxGeo(x, y - sd * 0.3, Math.cos(f * 3) * 0.32,
+                                0.09, 0.17, 0.09), [238, 232, 210]));
+        }
+      }
+      ps.push(part(ovalGeo(0, -0.3 - op * 0.5, -0.3, 1.0, 0.5 + op * 0.4, 0.5, 8, 11),
+                   [72, 20, 30]));
+      ps.push(part(ovalGeo(0, -0.5 - op * 0.6, 0.2, 0.55, 0.2, 0.5, 6, 9),
+                   [214, 84, 104]));
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0007) * 0.6, 0, 30, 0); }],
+
+    ['Teeth', function (g, t) {
+      /* the arch chatters, and one of them is always missing */
+      var ch = Math.sin(t * 0.03) * 0.12;
+      var gone = Math.floor(t * 0.0006) % 14;
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 14; i++) {
+          if (k === 0 && i === gone) continue;
+          var a = (i / 13 - 0.5) * 2.5;
+          var x = Math.sin(a) * 1.3, z = Math.cos(a) * 1.0 - 0.2;
+          var h = i < 3 || i > 10 ? 0.32 : 0.42;
+          ps.push(part(xfG(prism([[-0.16, -h], [-0.13, h * 0.7], [0, h],
+                                  [0.13, h * 0.7], [0.16, -h]], 0.15),
+                           0, a, 0, x, sd * (0.42 + ch) * -1 + (sd > 0 ? 0 : 0), z),
+                       [240, 234, 214]));
+        }
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, 1.25, 0.16, 16, 6), 1, 0.55, 0.85),
+                         Math.PI / 2, 0, 0, 0, sd * (0.82 + ch), -0.2),
+                     [198, 76, 92]));
+      }
+      obj(g, mergeC(ps), 0.3, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Salivary gland', function (g, t) {
+      /* three of them, and none of them stop */
+      var ps = [], i, k;
+      var at = [[-1.0, 0.6, 0, 0.62], [0.95, 0.5, 0.2, 0.5], [-0.1, -0.7, -0.1, 0.44]];
+      for (k = 0; k < 3; k++) {
+        var P = at[k];
+        ps.push(part(ovalGeo(P[0], P[1], P[2], P[3], P[3] * 0.8, P[3] * 0.8, 8, 11),
+                     [212, 148, 120]));
+        for (i = 0; i < 7; i++) {
+          var a = i / 7 * TAU;
+          ps.push(part(sphGeo(P[0] + Math.cos(a) * P[3] * 0.9,
+                              P[1] + Math.sin(a) * P[3] * 0.7, P[2] + 0.3,
+                              P[3] * 0.32, 4, 6), [230, 176, 140]));
+        }
+        ps.push(part(barGeo(P[0], P[1] - P[3], P[2], 0, -0.4, 0.3, 0.07),
+                     [224, 194, 160]));
+        for (i = 0; i < 4; i++) {
+          var f = ((t * 0.0011 + k * 0.3 + i * 0.25) % 1);
+          ps.push(part(sphGeo(0 + Math.sin(k * 2) * 0.2, -0.5 - f * 1.3,
+                              0.3, 0.13 - f * 0.05, 4, 6), [186, 214, 226]));
+        }
+      }
+      obj(g, mergeC(ps), 0.12, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Oesophagus', function (g, t) {
+      /* something goes down it on a loop and never arrives */
+      var ps = [], i, n = 22;
+      var bol = ((t * 0.00055) % 1);
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var y = 1.8 - f * 3.6;
+        var d = Math.abs(f - bol);
+        var bulge = Math.max(0, 1 - d * 9) * 0.45;
+        var sq = Math.max(0, 1 - Math.abs(f - bol + 0.1) * 9) * 0.22;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.52 + bulge - sq, 0.12, 14, 5), 1, 1, 0.9),
+                         Math.PI / 2, 0, 0, Math.sin(f * 4) * 0.15, y, 0),
+                     [208, 116, 124]));
+      }
+      ps.push(part(sphGeo(Math.sin(bol * 4) * 0.15, 1.8 - bol * 3.6, 0, 0.36, 6, 9),
+                   [150, 122, 84]));
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0007) * 0.8, 0, 28, 0); }],
+
+    ['Stomach', function (g, t) {
+      /* it churns, it inflates, and what goes in does not come out */
+      var full = (Math.sin(t * 0.0008) + 1) / 2;
+      var ch = Math.sin(t * 0.0042);
+      var ps = [], i, n = 16;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = Math.PI * (1.15 - f * 1.25);
+        var R = 1.15 - f * 0.25;
+        var x = Math.cos(a) * R + 0.2, y = Math.sin(a) * R * 1.1 - 0.2;
+        var r = (0.28 + Math.sin(f * Math.PI) * 0.55) * (0.8 + full * 0.4)
+                + Math.sin(f * 7 + ch * 3) * 0.08;
+        ps.push(part(sphGeo(x, y, 0, r, 6, 9), [204, 108, 106]));
+      }
+      ps.push(part(lathe([[0.26, 2.0], [0.28, 1.2]], 10, -0.55, 0, 0), [214, 130, 128]));
+      ps.push(part(lathe([[0.22, -1.3], [0.24, -2.0]], 10, 1.1, 0, 0), [214, 130, 128]));
+      for (i = 0; i < 6; i++) {     /* whatever is in there, going round */
+        var b = t * 0.0035 + i * 1.05;
+        ps.push(part(sphGeo(0.3 + Math.cos(b) * 0.55, -0.1 + Math.sin(b) * 0.5, 0,
+                            0.17, 4, 7), [140, 116, 70]));
+      }
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.6, 0, 26, 0); }],
+
+    ['Duodenum', function (g, t) {
+      /* the C kinks and straightens like a hose being trodden on */
+      var k2 = (Math.sin(t * 0.0017) + 1) / 2;
+      var ps = [], i, n = 22;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = Math.PI * (-0.45 + f * 1.5) * (1 - k2 * 0.35);
+        var R = 1.2 + Math.sin(f * 9 + t * 0.003) * k2 * 0.3;
+        ps.push(part(sphGeo(Math.cos(a) * R - 0.4, Math.sin(a) * R * 0.95,
+                            Math.sin(f * 5) * 0.25, 0.3 - Math.abs(f - 0.5) * 0.14, 5, 8),
+                     [214, 128, 116]));
+      }
+      ps.push(part(ovalGeo(-1.5, 0.2, -0.1, 0.5, 0.75, 0.42, 8, 11), [200, 156, 96]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Jejunum', function (g, t) {
+      /* it unspools into a straight line and gathers itself back up */
+      var un = (Math.sin(t * 0.0007) + 1) / 2;
+      var ps = [], i, n = 46;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = f * TAU * 3.2;
+        var R = 1.25 - f * 0.3;
+        var x = (1 - un) * Math.cos(a) * R + un * (f - 0.5) * 3.6;
+        var y = (1 - un) * Math.sin(a) * R * 0.85
+                + un * Math.sin(f * 11 + t * 0.003) * 0.35;
+        var z = (1 - un) * Math.sin(a * 2) * 0.35;
+        ps.push(part(sphGeo(x, y, z, 0.22, 4, 7), [220, 132, 116]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Ileum', function (g, t) {
+      /* the villi are a field of grass and there is a wind in it */
+      var ps = [], i, j;
+      for (j = 0; j < 9; j++) for (i = 0; i < 13; i++) {
+        var x = (i - 6) * 0.23, z = (j - 4) * 0.23;
+        var lean = Math.sin(x * 2 + z + t * 0.0034) * 0.32;
+        ps.push(part(barGeo(x, -0.7, z, x + lean, -0.7 + 0.55, z + lean * 0.5, 0.055),
+                     [236, 148, 140]));
+        ps.push(part(sphGeo(x + lean, -0.15, z + lean * 0.5, 0.07, 3, 5),
+                     [248, 180, 166]));
+      }
+      ps.push(part(boxGeo(0, -0.85, 0, 1.6, 0.16, 1.1), [190, 92, 90]));
+      obj(g, mergeC(ps), 0.5, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Small intestine', function (g, t) {
+      /* several metres of it, and all of it is moving */
+      var ps = [], i, n = 54;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = f * TAU * 2.8 + Math.sin(t * 0.0011) * 0.5;
+        var R = 1.3 * (0.45 + 0.55 * Math.abs(Math.sin(f * 3.4 + t * 0.0013)));
+        var wr = Math.sin(f * 15 - t * 0.0045) * 0.2;
+        ps.push(part(sphGeo(Math.cos(a) * R + wr, Math.sin(a) * R * 0.9,
+                            Math.sin(a * 1.7 + t * 0.0016) * 0.45,
+                            0.23 + Math.sin(f * 20 - t * 0.005) * 0.05, 4, 7),
+                     [218, 124, 110]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0005) * 0.5, 0, 30, 0); }],
+
+    ['Large intestine', function (g, t) {
+      /* the frame of it, squeezing in sequence like a hand closing */
+      var ps = [], i, n = 40;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x, y;
+        if (f < 0.3) { x = -1.25; y = -1.3 + (f / 0.3) * 2.5; }
+        else if (f < 0.55) { x = -1.25 + ((f - 0.3) / 0.25) * 2.5; y = 1.2; }
+        else if (f < 0.85) { x = 1.25; y = 1.2 - ((f - 0.55) / 0.3) * 2.4; }
+        else { x = 1.25 - ((f - 0.85) / 0.15) * 1.1; y = -1.2 - (f - 0.85) * 2; }
+        var sq = Math.max(0, Math.sin((f * 6 - t * 0.0022) * Math.PI * 2));
+        ps.push(part(sphGeo(x, y, Math.sin(f * 8) * 0.2,
+                            0.34 - sq * 0.16, 5, 8), [204, 122, 104]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Caecum', function (g, t) {
+      /* a pouch with an opinion, gulping at nothing */
+      var gu = Math.pow((Math.sin(t * 0.0026) + 1) / 2, 3);
+      var s2 = 0.9 + gu * 0.35;
+      var ps = [part(scG(ovalGeo(0, -0.2, 0, 1.0, 0.95, 0.9, 10, 13), s2, s2, s2),
+                     [206, 118, 102]),
+                part(lathe([[0.36, 1.5], [0.4, 0.7]], 12, -0.7, 0, 0), [214, 130, 112]),
+                part(lathe([[0.3, 1.4], [0.34, 0.6]], 12, 0.75, 0, 0), [214, 130, 112])], i;
+      for (i = 0; i < 9; i++) {
+        var a = i / 9 * TAU;
+        ps.push(part(sphGeo(Math.cos(a) * 1.0 * s2, -0.2 + Math.sin(a) * 0.9 * s2,
+                            0.35, 0.16, 4, 6), [230, 158, 126]));
+      }
+      ps.push(part(barGeo(-0.2, -1.1 * s2, 0, -0.6, -1.9, 0.3, 0.13), [212, 110, 100]));
+      obj(g, mergeC(ps), 0.12, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Appendix', function (g, t) {
+      /* it wriggles, and every so often it goes an alarming red */
+      var flare = Math.max(0, Math.sin(t * 0.00045) - 0.5) * 2;
+      var ps = [], i, n = 18;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var w = Math.sin(f * 4 - t * 0.0042) * 0.45 * f;
+        ps.push(part(sphGeo(Math.sin(w) * 1.1, 1.1 - f * 2.4, Math.cos(w * 2) * 0.4,
+                            0.22 + flare * 0.12 - f * 0.06, 4, 7),
+                     [190 + flare * 62, 106 - flare * 70, 96 - flare * 60]));
+      }
+      ps.push(part(ovalGeo(0, 1.5, 0, 0.7, 0.5, 0.6, 8, 11), [198, 116, 102]));
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Colon', function (g, t) {
+      /* haustra, contracting one after another, all the way along */
+      var ps = [], i, n = 24;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x = -2 + f * 4;
+        var sq = Math.max(0, Math.sin((f * 5 - t * 0.0024) * Math.PI * 2));
+        var r = 0.55 - sq * 0.3;
+        ps.push(part(ovalGeo(x, Math.sin(f * 6) * 0.25, 0, 0.13, r, r, 5, 9),
+                     [206, 126, 104]));
+        if (i % 3 === 0)
+          ps.push(part(xfG(scG(torGeo(0, 0, 0, r + 0.08, 0.06, 12, 5), 0.5, 1, 1),
+                           0, 0, 0, x, Math.sin(f * 6) * 0.25, 0), [230, 190, 120]));
+      }
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Rectum', function (g, t) {
+      /* a vault that fills, and fills, and resets */
+      var fill = (t % 4200) / 4200;
+      var ps = [part(lathe([[0.5, 1.7], [0.62, 0.9], [0.75 + fill * 0.35, 0.1],
+                            [0.7 + fill * 0.3, -0.8], [0.4, -1.4], [0.34, -1.7]], 14),
+                     [200, 112, 108])], i;
+      for (i = 0; i < 12; i++) {
+        var a = i * 2.399, r = Math.sqrt(i / 12) * 0.6 * fill;
+        ps.push(part(sphGeo(Math.cos(a) * r, -0.5 + fill * 0.9 + Math.sin(i) * 0.2,
+                            Math.sin(a) * r, 0.17, 4, 6), [126, 96, 58]));
+      }
+      for (i = 0; i < 10; i++) {
+        var a2 = i / 10 * TAU;
+        ps.push(part(sphGeo(Math.cos(a2) * 0.36, -1.75, Math.sin(a2) * 0.36,
+                            0.12, 3, 6), [180, 84, 92]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0006) * 0.7, 0, 28, 0); }],
+
+    ['Liver', function (g, t) {
+      /* the lobes peel apart to show you nothing, then close again */
+      var sp = Math.pow((Math.sin(t * 0.0008) + 1) / 2, 2) * 1.3;
+      var ps = [part(xfG(scG(ovalGeo(0, 0, 0, 1.15, 0.62, 0.7, 10, 13), 1, 1, 1),
+                         0, -sp * 0.5, sp * 0.18, -0.55 - sp * 0.5, 0.1, 0),
+                     [128, 40, 48]),
+                part(xfG(scG(ovalGeo(0, 0, 0, 0.8, 0.52, 0.6, 9, 12), 1, 1, 1),
+                         0, sp * 0.5, -sp * 0.18, 0.75 + sp * 0.5, -0.05, 0),
+                     [150, 52, 56])], i;
+      for (i = 0; i < 12; i++) {   /* the vessels stretch across the gap */
+        var f = i / 12;
+        ps.push(part(barGeo(-0.55 - sp * 0.5 + 0.7, 0.1 + (f - 0.5) * 0.7, 0,
+                            0.75 + sp * 0.5 - 0.5, -0.05 + (f - 0.5) * 0.6,
+                            Math.sin(f * 5) * 0.2, 0.05),
+                     [214, 168, 88]));
+      }
+      ps.push(part(ovalGeo(0.2, -0.6, 0.45, 0.3, 0.42, 0.3, 6, 9), [96, 156, 68]));
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Gallbladder', function (g, t) {
+      /* it squeezes, and what comes out is a very particular green */
+      var sq = Math.pow((Math.sin(t * 0.0019) + 1) / 2, 3);
+      var ps = [part(lathe([[0.05, 1.1], [0.35, 0.7], [0.7 - sq * 0.3, 0.1],
+                            [0.72 - sq * 0.32, -0.6], [0.45, -1.1], [0.05, -1.3]], 14),
+                     [96, 152, 66])], i;
+      for (i = 0; i < 7; i++) {
+        var f = ((t * 0.0012 + i * 0.143) % 1);
+        ps.push(part(sphGeo(Math.sin(i * 2.1) * 0.12, 1.15 + f * 1.1,
+                            Math.cos(i * 1.6) * 0.12, 0.15 - f * 0.05, 4, 6),
+                     [140, 196, 74]));
+      }
+      ps.push(part(lathe([[0.16, 1.15], [0.18, 2.2]], 10), [150, 166, 92]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Pancreas', function (g, t) {
+      /* it will not hold still, and it keeps shedding little copies */
+      var j = function (o) { return Math.sin(t * 0.026 + o) * 0.06; };
+      var ps = [], i, n = 14;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x = -1.5 + f * 3;
+        var h = (0.5 - Math.abs(f - 0.25) * 0.55) * 0.9;
+        ps.push(part(ovalGeo(x + j(i), Math.sin(f * 3) * 0.3 + j(i + 2), j(i + 4),
+                             0.16, h, h * 0.8, 5, 8), [202, 150, 96]));
+      }
+      for (i = 0; i < 8; i++) {    /* islets drifting off it */
+        var f2 = ((t * 0.0007 + i * 0.125) % 1);
+        ps.push(part(sphGeo(-1.2 + i * 0.35, Math.sin(i) * 0.3 - f2 * 1.6,
+                            0.4 + f2 * 0.5, 0.15 * (1 - f2 * 0.5), 4, 6),
+                     [230, 196, 110]));
+      }
+      ps.push(part(barGeo(-1.5, 0, 0, 1.5, 0.4, 0, 0.05), [228, 212, 160]));
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Thyroid', function (g, t) {
+      /* it is shaped like a butterfly and has started to act like one */
+      var fl = Math.sin(t * 0.0032);
+      var ps = [part(lathe([[0.2, 0.55], [0.26, 0], [0.2, -0.55]], 10), [182, 66, 74])],
+          i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 9; i++) {
+          var f = i / 9;
+          var y = 0.55 - f * 1.5;
+          var w = Math.sin((1 - f) * 2.2) * 0.95;
+          ps.push(part(xfG(ovalGeo(0, 0, 0, w * 0.5, 0.26, 0.22, 5, 8),
+                           0, 0, sd * fl * 0.5,
+                           sd * (0.28 + w * 0.6), y + sd * fl * w * 0.4,
+                           Math.sin(f * 3) * 0.2), [196, 78, 80]));
+        }
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 32, 0); }],
+
+    ['Parathyroid', function (g, t) {
+      /* four beads that keep swapping which corner they belong to */
+      var a0 = t * 0.0011;
+      var ps = [part(scG(ovalGeo(0, 0, -0.35, 1.0, 1.15, 0.4, 9, 12), 1, 1, 1),
+                     [168, 62, 70])], i;
+      for (i = 0; i < 4; i++) {
+        var a = a0 + i * TAU / 4;
+        ps.push(part(sphGeo(Math.cos(a) * 0.78, Math.sin(a) * 0.95, 0.15, 0.27, 6, 9),
+                     [222, 176, 92]));
+        ps.push(part(barGeo(0, 0, -0.2, Math.cos(a) * 0.78, Math.sin(a) * 0.95, 0.15,
+                            0.05), [206, 148, 110]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 34, 0); }],
+
+    ['Adrenal gland', function (g, t) {
+      /* a hat on a kidney, throwing off sparks at short notice */
+      var fire = Math.max(0, Math.sin(t * 0.0009) - 0.5) * 2;
+      var ps = [part(ovalGeo(0, -0.85, 0, 1.0, 0.85, 0.72, 10, 13),
+                     [138, 48, 60])], i, j;
+      for (j = 0; j < 7; j++) {    /* the cap, sitting on it properly */
+        var f = j / 6;
+        var w = (0.95 - Math.abs(f - 0.35) * 0.6) * 1.0;
+        ps.push(part(ovalGeo((f - 0.45) * 1.5, 0.2 + Math.sin(f * 3) * 0.18, 0,
+                             0.22, 0.3 * w, 0.42 * w, 6, 9), [222, 186, 106]));
+      }
+      for (i = 0; i < 14; i++) {
+        var a = i / 14 * TAU;
+        var r = 0.55 + fire * (0.7 + ((i * 7) % 5) * 0.2);
+        ps.push(part(sphGeo(Math.cos(a) * r, 0.55 + Math.sin(a) * r * 0.65,
+                            Math.sin(a * 2) * 0.35, 0.14 + fire * 0.1, 4, 6),
+                     [255, 196 - fire * 90, 70]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Thymus', function (g, t) {
+      /* it is supposed to shrink with age; this one cannot decide */
+      var age = (Math.sin(t * 0.0006) + 1) / 2;
+      var s2 = 1.2 - age * 0.55;
+      var ps = [], i, j, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (j = 0; j < 7; j++) {   /* each lobe built from lobules */
+          var f = j / 6;
+          var w = (0.42 - Math.abs(f - 0.45) * 0.3);
+          ps.push(part(scG(ovalGeo(sd * 0.52 / s2, (f - 0.5) * 2.3 / s2, 0,
+                                   w * 1.4, 0.34, w * 1.3, 7, 10), s2, s2, s2),
+                       k ? [212, 122, 118] : [188, 96, 104]));
+        }
+      }
+      for (i = 0; i < 16; i++) {  /* cells leaving, faster as it shrinks */
+        var f2 = ((t * (0.0006 + age * 0.0012) + i * 0.0625) % 1);
+        var a = i * 2.399;
+        ps.push(part(sphGeo(Math.cos(a) * (0.5 + f2 * 1.6),
+                            Math.sin(i * 1.3) * 0.9 - f2 * 0.5,
+                            Math.sin(a) * (0.5 + f2 * 1.6),
+                            0.16 * (1 - f2 * 0.35), 4, 6), [150, 186, 226]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Islets of Langerhans', function (g, t) {
+      /* islands, and they drift the way islands are not meant to */
+      var ps = [], i, k, n = 9;
+      for (k = 0; k < n; k++) {
+        var a = k * 2.399 + t * 0.0004 * (1 + (k % 3) * 0.5);
+        var R = 0.35 + (k % 4) * 0.35;
+        var cx = Math.cos(a) * R, cy = Math.sin(a) * R * 0.8;
+        var cz = Math.sin(a * 1.7) * 0.4;
+        ps.push(part(sphGeo(cx, cy, cz, 0.3, 6, 9), [230, 196, 104]));
+        for (i = 0; i < 6; i++) {
+          var b = i / 6 * TAU + t * 0.0018;
+          ps.push(part(sphGeo(cx + Math.cos(b) * 0.3, cy + Math.sin(b) * 0.3,
+                              cz + 0.2, 0.09, 3, 5), [246, 226, 150]));
+        }
+      }
+      for (i = 0; i < 20; i++) {  /* the sea of pancreas around them */
+        var a2 = i * 2.399, r2 = Math.sqrt(i / 20) * 1.5;
+        ps.push(part(ovalGeo(Math.cos(a2) * r2, Math.sin(a2) * r2 * 0.8, -0.5,
+                             0.2, 0.2, 0.1, 4, 6), [192, 138, 88]));
+      }
+      obj(g, mergeC(ps), 0.3, Math.sin(t * 0.0005) * 0.4, 0, 30, 0); }],
+
+    ['Spleen', function (g, t) {
+      /* red cells go in; the worn-out ones do not come out again */
+      var pu = (Math.sin(t * 0.0018) + 1) / 2;
+      var s2 = 0.92 + pu * 0.16;
+      var ps = [part(scG(ovalGeo(0, 0, 0, 0.75, 1.25, 0.65, 10, 14), s2, s2, s2),
+                     [110, 34, 62])], i;
+      for (i = 0; i < 14; i++) {
+        var f = ((t * 0.0009 + i * 0.071) % 1);
+        var lane = (i % 5 - 2) * 0.35;
+        var fresh = f < 0.5;
+        var x = -1.8 + f * 3.6;
+        ps.push(part(ovalGeo(x, lane, Math.sin(i) * 0.3,
+                             0.16 * (fresh ? 1 : 0.6), 0.11, 0.14, 4, 6),
+                     fresh ? [214, 44, 52] : [96, 60, 88]));
+      }
+      for (i = 0; i < 8; i++) {
+        var a = i / 8 * TAU;
+        ps.push(part(barGeo(0, 0, 0, Math.cos(a) * 0.8 * s2,
+                            Math.sin(a) * 1.3 * s2, 0.3, 0.05), [168, 76, 96]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Lymph node', function (g, t) {
+      /* it swells to an unreasonable size and then pretends it did not */
+      var sw = Math.pow((Math.sin(t * 0.0008) + 1) / 2, 3);
+      var R = 0.6 + sw * 0.85;
+      var ps = [part(ovalGeo(0, 0, 0, R, R * 1.25, R * 0.9, 10, 14),
+                     [176, 134, 148])], i;
+      for (i = 0; i < 5; i++) {   /* afferent vessels feeding it */
+        var a = Math.PI * (0.25 + i * 0.12);
+        ps.push(part(barGeo(Math.cos(a) * 2, Math.sin(a) * 2, 0,
+                            Math.cos(a) * R, Math.sin(a) * R * 1.2, 0, 0.08),
+                     [206, 200, 168]));
+      }
+      ps.push(part(barGeo(0, -R * 1.2, 0, 0.3, -2, 0, 0.1), [206, 200, 168]));
+      for (i = 0; i < 12; i++) {  /* it is full of something */
+        var b = i * 2.399;
+        ps.push(part(sphGeo(Math.cos(b) * R * 0.55, Math.sin(b) * R * 0.7,
+                            Math.sin(i) * R * 0.4, 0.11 + sw * 0.06, 3, 6),
+                     [214, 190, 212]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Tonsil', function (g, t) {
+      /* the crypts open and shut, and each one is a small mouth */
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        ps.push(part(ovalGeo(sd * 0.95, 0, 0, 0.62, 0.85, 0.6, 9, 12),
+                     [198, 84, 96]));
+        for (i = 0; i < 7; i++) {
+          var a = i / 7 * TAU + k;
+          var op = (Math.sin(t * 0.0026 + i * 1.3 + k * 2) + 1) / 2;
+          ps.push(part(xfG(prismRing(0.19, 0.06 + op * 0.08, 8, 0.05),
+                           0, 0, 0, sd * 0.95 + Math.cos(a) * 0.4,
+                           Math.sin(a) * 0.55, 0.55), [104, 26, 40]));
+        }
+      }
+      ps.push(part(lathe([[0.55, 1.5], [0.6, -1.5]], 12), [214, 118, 124]));
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0007) * 0.7, 0, 30, 0); }],
+
+    ['Adenoid', function (g, t) {
+      /* it inflates until it blocks the passage, then sulks */
+      var bl = Math.pow((Math.sin(t * 0.0009) + 1) / 2, 2);
+      var ps = [], i, j;
+      for (i = 0; i < 22; i++) {
+        var a = i * 2.399, r = Math.sqrt(i / 22) * (0.7 + bl * 0.7);
+        ps.push(part(sphGeo(Math.cos(a) * r, 0.55 - r * 0.4 + bl * 0.25,
+                            Math.sin(a) * r * 0.8, 0.3 + bl * 0.12, 6, 9),
+                     [178, 62, 78]));
+      }
+      for (j = 0; j < 12; j++) {  /* the airway it is closing off */
+        var f = j / 11;
+        for (i = 0; i < 12; i++) {
+          var a2 = i / 12 * TAU;
+          ps.push(part(sphGeo(Math.cos(a2) * 1.6, -0.8 + f * 0.1 + Math.sin(a2) * 0.2,
+                              Math.sin(a2) * 1.2 + (f - 0.5) * 0.3, 0.14, 3, 5),
+                       [218, 178, 160]));
+        }
+        break;
+      }
+      for (i = 0; i < 18; i++) {
+        var a3 = i / 18 * TAU;
+        ps.push(part(ovalGeo(Math.cos(a3) * 1.65, -0.85, Math.sin(a3) * 1.2,
+                             0.2, 0.22, 0.2, 4, 7), [214, 172, 154]));
+      }
+      obj(g, mergeC(ps), 0.3, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Bone marrow', function (g, t) {
+      /* the bone is a chimney and something is coming up it */
+      var ps = [part(lathe([[0.85, 1.7], [0.7, 1.0], [0.68, -1.0], [0.85, -1.7]], 16),
+                     [214, 206, 180])], i;
+      for (i = 0; i < 20; i++) {
+        var f = ((t * 0.0008 + i * 0.05) % 1);
+        var a = i * 2.399;
+        var r = 0.45 * (1 - f * 0.4);
+        ps.push(part(sphGeo(Math.cos(a) * r, -1.5 + f * 3.2, Math.sin(a) * r,
+                            0.16 - f * 0.05, 4, 6),
+                     f < 0.5 ? [196, 46, 58] : [216, 200, 228]));
+      }
+      ps.push(part(lathe([[0.5, 1.6], [0.44, 0], [0.5, -1.6]], 12), [168, 64, 72]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Left kidney', function (g, t) {
+      /* things go in clear and come out sorted, which is the job */
+      var ps = [], i, j;
+      for (j = 0; j < 13; j++) {
+        var f = j / 12;
+        var a = Math.PI * (-0.55 + f * 1.1);
+        var R = 1.15 - Math.cos(a) * 0.35;
+        ps.push(part(ovalGeo(Math.cos(a) * R - 0.35, Math.sin(a) * R * 1.05, 0,
+                             0.42, 0.28, 0.5, 6, 9), [136, 48, 58]));
+      }
+      for (i = 0; i < 9; i++) {
+        var fl = ((t * 0.0011 + i * 0.111) % 1);
+        ps.push(part(sphGeo(-1.7 + fl * 1.5, Math.sin(i * 1.7) * 0.8, 0.3,
+                            0.14, 4, 6), [216, 60, 66]));
+        ps.push(part(sphGeo(0.6 + fl * 1.2, -0.4 - fl * 0.9, 0.2,
+                            0.11 - fl * 0.03, 4, 6), [232, 208, 110]));
+      }
+      ps.push(part(barGeo(0.5, -0.4, 0, 1.6, -1.7, 0, 0.13), [204, 188, 160]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Right kidney', function (g, t) {
+      /* the same job, mirrored, and running slightly behind */
+      var ps = [], i, j;
+      for (j = 0; j < 13; j++) {
+        var f = j / 12;
+        var a = Math.PI * (0.45 + f * 1.1);
+        var R = 1.15 + Math.cos(a) * 0.35;
+        ps.push(part(ovalGeo(Math.cos(a) * R + 0.35, Math.sin(a) * R * 1.05, 0,
+                             0.42, 0.28, 0.5, 6, 9), [148, 56, 62]));
+      }
+      for (i = 0; i < 9; i++) {
+        var fl = ((t * 0.0009 + i * 0.111) % 1);
+        ps.push(part(sphGeo(1.7 - fl * 1.5, Math.sin(i * 1.7) * 0.8, 0.3,
+                            0.14, 4, 6), [216, 60, 66]));
+        ps.push(part(sphGeo(-0.6 - fl * 1.2, -0.4 - fl * 0.9, 0.2,
+                            0.11 - fl * 0.03, 4, 6), [232, 208, 110]));
+      }
+      ps.push(part(barGeo(-0.5, -0.4, 0, -1.6, -1.7, 0, 0.13), [204, 188, 160]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Ureter', function (g, t) {
+      /* it does not trickle, it squirts, at intervals of its choosing */
+      var ps = [], i, n = 20;
+      var sh = ((t * 0.0006) % 1);
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var d = f - sh;
+        var bulge = Math.max(0, 1 - Math.abs(d) * 11) * 0.4;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.3 + bulge, 0.09, 12, 5), 1, 1, 0.85),
+                         Math.PI / 2, 0, 0, Math.sin(f * 4) * 0.35, 1.7 - f * 3.4, 0),
+                     [206, 152, 144]));
+      }
+      ps.push(part(sphGeo(Math.sin(sh * 4) * 0.35, 1.7 - sh * 3.4, 0, 0.26, 5, 8),
+                   [232, 226, 150]));
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0007) * 0.8, 0, 28, 0); }],
+
+    ['Bladder', function (g, t) {
+      /* it fills for a long time and empties all at once */
+      var c = (t % 5200) / 5200;
+      var fill = c < 0.88 ? c / 0.88 : 1 - (c - 0.88) / 0.12;
+      var R = 0.55 + fill * 0.85;
+      var ps = [part(ovalGeo(0, 0.1, 0, R, R * 0.92, R * 0.9, 11, 15),
+                     [200, 150, 140])], i;
+      for (i = 0; i < 2; i++) {
+        var sd = i ? 1 : -1;
+        ps.push(part(barGeo(sd * 0.4, 1.9, 0, sd * R * 0.6, 0.1 + R * 0.7, 0, 0.1),
+                     [206, 152, 144]));
+      }
+      ps.push(part(lathe([[0.2, 0.1 - R * 0.9], [0.22, -1.8]], 10), [190, 130, 128]));
+      for (i = 0; i < 10; i++) {  /* what is in there, sloshing */
+        var a = i * 2.399, r = Math.sqrt(i / 10) * R * 0.6;
+        ps.push(part(sphGeo(Math.cos(a) * r, 0.1 - R * 0.3 + Math.sin(i) * 0.15,
+                            Math.sin(a) * r, 0.16, 4, 6), [228, 214, 122]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Urethra', function (g, t) {
+      /* a corridor with one door, and the door is on a timer */
+      var op = Math.max(0, Math.sin(t * 0.0009) - 0.4) * 1.7;
+      var ps = [], i, n = 16;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var gate = Math.abs(f - 0.35) < 0.06 ? 1 - op : 1;
+        ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.32 * gate + 0.06, 0.1, 12, 5),
+                             1, 1, 0.9), Math.PI / 2, 0, 0,
+                         Math.sin(f * 3) * 0.2, 1.6 - f * 3.2, 0),
+                     gate < 1 ? [220, 176, 96] : [206, 146, 140]));
+      }
+      for (i = 0; i < 7; i++) {
+        if (op < 0.2) continue;
+        var f2 = ((t * 0.0022 + i * 0.143) % 1);
+        ps.push(part(sphGeo(Math.sin(f2 * 3) * 0.2, 0.5 - f2 * 2.2, 0, 0.14, 4, 6),
+                     [234, 222, 140]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0007) * 0.8, 0, 28, 0); }],
+
+    ['Nephron', function (g, t) {
+      /* one of a million, and it is spinning its own little knot */
+      var ps = [], i, n = 34;
+      for (i = 0; i < n; i++) {   /* the glomerulus, tangled and turning */
+        var a = i * 2.399 + t * 0.0022, r = 0.42;
+        var b = i * 1.1;
+        ps.push(part(sphGeo(-0.9 + Math.cos(a) * Math.cos(b) * r,
+                            0.9 + Math.sin(b) * r,
+                            Math.sin(a) * Math.cos(b) * r, 0.1, 3, 5),
+                     [206, 52, 60]));
+      }
+      ps.push(part(ovalGeo(-0.9, 0.9, 0, 0.6, 0.6, 0.55, 8, 11), [214, 178, 186]));
+      for (i = 0; i < 26; i++) {  /* the tubule, with filtrate running down */
+        var f = i / 26;
+        var a2 = f * TAU * 1.6;
+        var x = -0.9 + f * 1.9 + Math.sin(a2) * 0.3;
+        var y = 0.5 - f * 2.1;
+        var lit = Math.max(0, 1 - Math.abs(((t * 0.0013) % 1.2) - f) * 8);
+        ps.push(part(sphGeo(x, y, Math.cos(a2) * 0.3, 0.14 + lit * 0.07, 4, 6),
+                     [214 + lit * 30, 190 + lit * 40, 120 + lit * 90]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Thoracic duct', function (g, t) {
+      /* clear cargo going the wrong way up the body */
+      var ps = [], i, n = 24;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var x = Math.sin(f * 4.2) * 0.5;
+        var y = -1.8 + f * 3.6;
+        ps.push(part(sphGeo(x, y, Math.cos(f * 3) * 0.25, 0.17, 4, 6),
+                     [196, 212, 200]));
+        if (i % 4 === 0)
+          ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.26, 0.07, 10, 5), 1, 0.5, 1),
+                           Math.PI / 2, 0, 0, x, y, Math.cos(f * 3) * 0.25),
+                       [170, 196, 186]));
+      }
+      for (i = 0; i < 8; i++) {
+        var f2 = ((t * 0.0009 + i * 0.125) % 1);
+        ps.push(part(sphGeo(Math.sin(f2 * 4.2) * 0.5, -1.8 + f2 * 3.6,
+                            Math.cos(f2 * 3) * 0.25, 0.13, 4, 6), [236, 250, 240]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0007) * 0.7, 0, 28, 0); }],
+
+    ['Ovary', function (g, t) {
+      /* the follicles ripen in turn, and one of them always goes */
+      var c = (t % 4800) / 4800;
+      var pop = Math.floor(c * 8) % 8;
+      var ps = [part(ovalGeo(0, 0, 0, 1.0, 0.72, 0.72, 10, 13), [212, 158, 156])], i;
+      for (i = 0; i < 8; i++) {
+        var a = i / 8 * TAU;
+        var ripe = ((c * 8 - i) % 8 + 8) % 8 / 8;
+        var R = 0.16 + (1 - ripe) * 0.28;
+        var out = i === pop ? (c * 8 % 1) : 0;
+        ps.push(part(sphGeo(Math.cos(a) * (0.6 + out * 1.4),
+                            Math.sin(a) * (0.45 + out * 1.0),
+                            0.3 + out * 0.5, R * (1 - out * 0.4), 5, 8),
+                     [244, 226, 168]));
+      }
+      for (i = 0; i < 6; i++) {
+        var b = i / 6 * TAU;
+        ps.push(part(barGeo(0, -0.7, 0, Math.cos(b) * 0.5, -1.5,
+                            Math.sin(b) * 0.4, 0.06), [206, 128, 130]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Fallopian tube', function (g, t) {
+      /* the fringe at the end waves like it is calling something over */
+      var ps = [], i, n = 18;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = Math.PI * (0.9 - f * 0.75);
+        var R = 1.25;
+        ps.push(part(sphGeo(Math.cos(a) * R, Math.sin(a) * R * 0.8 - 0.2,
+                            Math.sin(f * 4) * 0.2, 0.14 + f * 0.14, 4, 7),
+                     [216, 146, 148]));
+      }
+      for (i = 0; i < 11; i++) {   /* fimbriae */
+        var b = i / 11 * TAU;
+        var w = Math.sin(t * 0.0038 + i * 0.9) * 0.4;
+        ps.push(part(barGeo(Math.cos(Math.PI * 0.15) * 1.25,
+                            Math.sin(Math.PI * 0.15) * 1.0 - 0.2, 0,
+                            Math.cos(Math.PI * 0.15) * 1.25 + Math.cos(b) * 0.65 + w * 0.3,
+                            Math.sin(Math.PI * 0.15) * 1.0 - 0.2 + Math.sin(b) * 0.65 + w,
+                            Math.sin(b + w) * 0.4, 0.06), [236, 168, 164]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Uterus', function (g, t) {
+      /* a wave crosses it, top to bottom, and then does it again */
+      var ps = [], i, n = 16;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var y = 1.2 - f * 2.6;
+        var sq = Math.max(0, Math.sin((f * 2.4 - t * 0.0017) * Math.PI * 2)) * 0.22;
+        var w = (0.95 - f * 0.65) * (1 - sq);
+        ps.push(part(ovalGeo(0, y, 0, w, 0.14, w * 0.72, 6, 10), [178, 66, 82]));
+      }
+      for (i = 0; i < 2; i++) {    /* the horns at the top */
+        var sd = i ? 1 : -1;
+        ps.push(part(barGeo(sd * 0.75, 1.15, 0, sd * 1.7, 1.5, 0.1, 0.13),
+                     [198, 96, 104]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Cervix', function (g, t) {
+      /* a ring dilating, which is a thing rings should not do */
+      var d = Math.pow((Math.sin(t * 0.0009) + 1) / 2, 2);
+      var ps = [part(lathe([[0.95, 0.9], [1.05, 0.2], [0.95, -0.5],
+                            [0.8, -1.0]], 16), [192, 92, 100])], i;
+      for (i = 0; i < 20; i++) {
+        var a = i / 20 * TAU;
+        var r = 0.12 + d * 0.72;
+        ps.push(part(sphGeo(Math.cos(a) * r, Math.sin(a) * r, 0.95, 0.15, 4, 6),
+                     [222, 128, 130]));
+      }
+      for (i = 0; i < 8; i++) {   /* the dark inside it */
+        var a2 = i / 8 * TAU, r2 = (0.12 + d * 0.72) * 0.6;
+        ps.push(part(sphGeo(Math.cos(a2) * r2, Math.sin(a2) * r2, 0.6, 0.2, 4, 6),
+                     [58, 18, 28]));
+      }
+      obj(g, mergeC(ps), 0.5, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Testis', function (g, t) {
+      /* a tangle of one very long tube, with the coat cut away */
+      var ps = [], i, k, n = 52;
+      for (i = 0; i < n; i++) {   /* the tubules, on the outside now */
+        var f = i / n;
+        var a = f * TAU * 5 + t * 0.0014;
+        var b = f * Math.PI;
+        var R = 0.95;
+        ps.push(part(sphGeo(Math.cos(a) * Math.sin(b) * R,
+                            Math.cos(b) * R * 1.3,
+                            Math.sin(a) * Math.sin(b) * R, 0.17, 4, 6),
+                     [214, 158, 96]));
+      }
+      for (k = 0; k < 14; k++) {  /* the coat, as a back half-shell only */
+        var lat = (k / 13 - 0.5) * Math.PI;
+        for (i = 0; i < 9; i++) {
+          var a2 = 0.6 + i / 8 * 4.0;
+          ps.push(part(sphGeo(Math.cos(lat) * Math.sin(a2) * 1.1,
+                              Math.sin(lat) * 1.35,
+                              Math.cos(lat) * Math.cos(a2) * 1.1, 0.15, 3, 5),
+                       [186, 130, 128]));
+        }
+      }
+      ps.push(part(barGeo(0, 1.4, 0, 0.2, 2.1, 0, 0.14), [198, 146, 140]));
+      obj(g, mergeC(ps), 0.14, t * 0.0006, 0, 28, 0); }],
+
+    ['Epididymis', function (g, t) {
+      /* six metres of tube in a space that does not allow for it */
+      var un = (Math.sin(t * 0.0006) + 1) / 2;
+      var ps = [part(ovalGeo(0.55, -0.2, 0, 0.55, 0.85, 0.55, 9, 12),
+                     [204, 162, 156])], i, n = 48;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = f * TAU * 6;
+        var R = 0.42 * (1 - un * 0.7);
+        var x = -0.6 + Math.cos(a) * R + un * (f - 0.5) * 2.2;
+        var y = 1.1 - f * 2.2 * (1 - un * 0.6) + un * Math.sin(f * 9) * 0.5;
+        ps.push(part(sphGeo(x, y, Math.sin(a) * R, 0.13, 4, 6), [224, 178, 122]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Vas deferens', function (g, t) {
+      /* a long muscular tube with somewhere to be */
+      var ps = [], i, n = 26;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = Math.PI * (1.15 - f * 1.4);
+        var R = 1.3 - Math.sin(f * Math.PI) * 0.35;
+        var x = Math.cos(a) * R, y = Math.sin(a) * R * 0.85 - 0.2;
+        var p = Math.max(0, 1 - Math.abs(((t * 0.0012) % 1.3) - f) * 9);
+        ps.push(part(sphGeo(x, y, Math.sin(f * 5) * 0.2, 0.17 + p * 0.14, 4, 7),
+                     [200 + p * 40, 140 - p * 40, 132 - p * 30]));
+      }
+      ps.push(part(ovalGeo(-1.3, -1.1, 0, 0.45, 0.6, 0.42, 8, 11), [208, 166, 158]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Prostate', function (g, t) {
+      /* a chestnut with a ring round it, and the ring is tightening */
+      var gr = (Math.sin(t * 0.0011) + 1) / 2;
+      var ps = [part(scG(ovalGeo(0, 0, 0, 1.0, 0.85, 0.9, 11, 14),
+                         1, 1 - gr * 0.22, 1), [182, 108, 104])], i;
+      for (i = 0; i < 16; i++) {
+        var a = i / 16 * TAU;
+        ps.push(part(sphGeo(Math.cos(a) * (1.0 + gr * 0.1),
+                            Math.sin(a * 2) * 0.12,
+                            Math.sin(a) * (0.9 + gr * 0.1), 0.17, 4, 6),
+                     [212, 196, 150]));
+      }
+      ps.push(part(lathe([[0.22 - gr * 0.14, 1.6], [0.24 - gr * 0.15, -1.6]], 12),
+                   [198, 150, 146]));
+      for (i = 0; i < 8; i++) {
+        var b = i / 8 * TAU;
+        ps.push(part(barGeo(Math.cos(b) * 0.3, 0, Math.sin(b) * 0.3,
+                            Math.cos(b) * 0.95, -0.2, Math.sin(b) * 0.85, 0.05),
+                     [216, 168, 160]));
+      }
+      obj(g, mergeC(ps), 0.14, t * 0.0006, 0, 30, 0); }],
+
+    ['Seminal vesicle', function (g, t) {
+      /* a folded sac, inflating along its creases */
+      var fill = (Math.sin(t * 0.0013) + 1) / 2;
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 12; i++) {
+          var f = i / 12;
+          var a = f * TAU * 1.3;
+          var R = 0.35 + Math.sin(f * Math.PI) * 0.5 * (0.7 + fill * 0.6);
+          ps.push(part(sphGeo(sd * (0.55 + Math.cos(a) * R * 0.7),
+                              1.0 - f * 2.0 + Math.sin(a) * 0.2,
+                              Math.sin(a) * R * 0.7,
+                              0.22 + fill * 0.08, 5, 8), [206, 146, 112]));
+        }
+        ps.push(part(barGeo(sd * 0.5, -1.0, 0, 0, -1.7, 0, 0.1), [216, 168, 140]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Mammary gland', function (g, t) {
+      /* a tree of lobules, filling from the tips inward, with the
+         skin taken off so the tree is the thing you see */
+      var fill = (Math.sin(t * 0.001) + 1) / 2;
+      var ps = [], i, k;
+      for (k = 0; k < 10; k++) {
+        var a = k / 10 * TAU;
+        var ex = Math.cos(a) * 1.15, ey = Math.sin(a) * 1.15;
+        ps.push(part(barGeo(0, 0, 0.9, ex, ey, -0.1, 0.11), [230, 212, 180]));
+        for (i = 0; i < 5; i++) {
+          var b = i / 5 * TAU + k;
+          ps.push(part(sphGeo(ex + Math.cos(b) * 0.42, ey + Math.sin(b) * 0.42,
+                              -0.25 + Math.sin(b) * 0.2,
+                              0.2 + fill * 0.14, 5, 8),
+                       [214, 158 - fill * 40, 130 - fill * 40]));
+        }
+      }
+      ps.push(part(lathe([[0.36, 1.25], [0.3, 0.95], [0.12, 0.8]], 12), [166, 78, 90]));
+      for (i = 0; i < 16; i++) {   /* the skin, as a back shell only */
+        var a2 = i / 16 * TAU;
+        var j;
+        for (j = 0; j < 5; j++) {
+          var lat = (j / 4 - 0.5) * 1.6;
+          ps.push(part(sphGeo(Math.cos(lat) * Math.cos(a2) * 1.6,
+                              Math.cos(lat) * Math.sin(a2) * 1.6,
+                              Math.sin(lat) * 0.6 - 0.75, 0.14, 3, 5),
+                       [206, 150, 142]));
+        }
+      }
+      obj(g, mergeC(ps), 0.5, Math.sin(t * 0.0006) * 0.5, 0, 28, 0); }],
+
+    ['Skull', function (g, t) {
+      /* the plates drift apart along the sutures and the jaw
+         opens further than the hinge should permit */
+      var sp = Math.max(0, Math.sin(t * 0.0007)) * 0.5;
+      var jaw = Math.pow((Math.sin(t * 0.0011) + 1) / 2, 2) * 1.2;
+      var ps = [], i, j, k;
+      /* cranium: a shell of tiles, each tile pushed out along its
+         own normal, so the sutures open as gaps rather than the
+         whole thing turning into separate balls */
+      for (j = 0; j < 8; j++) for (i = 0; i < 14; i++) {
+        var lat = (j / 7 - 0.4) * 1.75, a = i / 14 * TAU;
+        if (lat < -0.5 && Math.cos(a) > 0.2) continue;   /* the face is open */
+        var nx = Math.cos(lat) * Math.cos(a), ny = Math.sin(lat);
+        var nz = Math.cos(lat) * Math.sin(a);
+        var plate = ((i / 4) | 0) + ((j / 3) | 0) * 4;
+        var push = 1 + sp * (0.12 + (plate % 5) * 0.06);
+        ps.push(part(ovalGeo(nx * 1.15 * push, ny * 1.1 * push + 0.35,
+                             nz * 1.2 * push, 0.18, 0.16, 0.18, 4, 7),
+                     [226, 218, 194]));
+      }
+      for (k = 0; k < 2; k++) {    /* orbits */
+        var sd = k ? 1 : -1;
+        ps.push(part(ovalGeo(sd * 0.5, 0.2, 1.05, 0.34, 0.36, 0.3, 7, 10),
+                     [34, 24, 28]));
+        for (i = 0; i < 10; i++) {
+          var b = i / 10 * TAU;
+          ps.push(part(sphGeo(sd * 0.5 + Math.cos(b) * 0.44, 0.2 + Math.sin(b) * 0.46,
+                              1.0, 0.13, 3, 6), [232, 224, 200]));
+        }
+      }
+      ps.push(part(prism([[-0.14, 0.1], [0.14, 0.1], [0, -0.35]], 0.12),
+                   [36, 26, 30]));
+      for (i = 0; i < 11; i++) {   /* the jaw, hinged too generously */
+        var f = i / 10 - 0.5;
+        var a2 = f * 2.4;
+        ps.push(part(ovalGeo(Math.sin(a2) * 0.95, -0.6 - jaw + Math.abs(f) * 0.3,
+                             Math.cos(a2) * 0.85 + 0.15, 0.16, 0.22, 0.16, 5, 8),
+                     [234, 226, 202]));
+        if (Math.abs(f) < 0.42)    /* teeth on it */
+          ps.push(part(boxGeo(Math.sin(a2) * 0.95, -0.42 - jaw,
+                              Math.cos(a2) * 0.85 + 0.15, 0.08, 0.14, 0.08),
+                       [248, 244, 228]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0006) * 0.8, 0, 28, 0); }],
+
+    ['Spine', function (g, t) {
+      /* every vertebra has decided to turn at its own rate */
+      var ps = [], i, n = 17;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var y = 1.7 - f * 3.4;
+        var a = t * (0.0008 + (i % 5) * 0.0006) + i;
+        var w = 0.34 + f * 0.2;
+        ps.push(part(xfG(lathe([[w, -0.09], [w * 1.2, -0.04], [w * 1.2, 0.04],
+                                [w, 0.09]], 10), 0, a, 0, 0, y, 0),
+                     [224, 216, 190]));
+        ps.push(part(xfG(prism([[-0.1, 0], [0.1, 0], [0, -0.55]], 0.06),
+                         Math.PI / 2, a, 0, 0, y, -w * 1.2), [236, 228, 200]));
+        ps.push(part(xfG(sphGeo(0, 0, 0, 0.09, 3, 6), 0, 0, 0, 0, y + 0.1, 0),
+                     [230, 206, 160]));
+      }
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0005) * 0.5, 0, 28, 0); }],
+
+    ['Ribcage', function (g, t) {
+      /* it breathes, but each rib takes its turn rather than joining in */
+      var ps = [part(prism([[-0.16, 1.3], [0.16, 1.3], [0.2, -0.9],
+                            [0, -1.2], [-0.2, -0.9]], 0.12), [230, 222, 198])], i, k;
+      for (i = 0; i < 11; i++) {
+        var f = i / 10;
+        var y = 1.2 - f * 2.4;
+        var br = (Math.sin(t * 0.0018 - i * 0.55) + 1) / 2;
+        var w = (0.7 + Math.sin(f * 2.6) * 0.75) * (0.9 + br * 0.24);
+        for (k = 0; k < 2; k++) {
+          var sd = k ? 1 : -1;
+          var pts = [], j;
+          for (j = 0; j < 9; j++) {
+            var a = j / 8 * Math.PI;
+            pts.push(part(sphGeo(sd * Math.sin(a) * w,
+                                 y - Math.sin(a) * 0.3 * f,
+                                 -Math.cos(a) * w * 0.75, 0.11, 3, 5),
+                          [226, 218, 194]));
+          }
+          for (j = 0; j < pts.length; j++) ps.push(pts[j]);
+        }
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 28, 0); }],
+
+    ['Pelvis', function (g, t) {
+      /* a cradle, rocking, with nothing in it */
+      var rk = Math.sin(t * 0.0016) * 0.35;
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 11; i++) {
+          var a = Math.PI * (-0.3 + i / 10 * 1.5);
+          var R = 1.2 - Math.sin(i / 10 * Math.PI) * 0.25;
+          ps.push(part(ovalGeo(sd * Math.abs(Math.cos(a)) * R * 0.85,
+                               Math.sin(a) * R * 0.8,
+                               -Math.cos(a) * 0.5, 0.26, 0.26, 0.4, 5, 8),
+                       [224, 216, 190]));
+        }
+        ps.push(part(sphGeo(sd * 0.95, -0.45, 0.25, 0.34, 7, 10), [206, 198, 172]));
+      }
+      ps.push(part(prism([[-0.28, 0.9], [0.28, 0.9], [0.22, -0.4],
+                          [-0.22, -0.4]], 0.18), [230, 222, 198]));
+      obj(g, mergeC(ps), 0.3 + rk, Math.sin(t * 0.0005) * 0.6, rk * 0.5, 30, 0); }],
+
+    ['Femur', function (g, t) {
+      /* it turns in a socket that is not attached to anything */
+      var a = t * 0.0013;
+      var ps = [part(lathe([[0.4, 1.5], [0.28, 1.0], [0.24, -0.9], [0.42, -1.5],
+                            [0.3, -1.7]], 14), [226, 218, 194]),
+                part(sphGeo(-0.55, 1.55, 0, 0.42, 9, 12), [236, 228, 204]),
+                part(barGeo(0, 1.4, 0, -0.5, 1.55, 0, 0.22), [226, 218, 194]),
+                part(sphGeo(-0.3, -1.7, 0.25, 0.32, 7, 10), [232, 224, 200]),
+                part(sphGeo(0.3, -1.7, 0.25, 0.32, 7, 10), [232, 224, 200])], i;
+      /* the socket it is turning in, floating free */
+      for (i = 0; i < 12; i++) {
+        var b = i / 12 * TAU;
+        ps.push(part(sphGeo(-0.55 + Math.cos(b) * 0.55, 1.55 + Math.sin(b) * 0.55,
+                            Math.sin(b + a) * 0.3, 0.14, 3, 6), [198, 190, 168]));
+      }
+      ps.push(part(lathe([[0.17, 1.2], [0.15, -1.2]], 10), [198, 74, 82]));
+      obj(g, mergeC(ps), 0.1, a, Math.sin(t * 0.0009) * 0.3, 28, 0); }],
+
+    ['Sternum', function (g, t) {
+      /* the ribs click on and off it, one pair at a time */
+      var ps = [part(prism([[-0.3, 1.5], [0.3, 1.5], [0.34, 0.9], [0.28, -0.9],
+                            [0, -1.5], [-0.28, -0.9], [-0.34, 0.9]], 0.2),
+                     [230, 222, 198])], i, k;
+      for (i = 0; i < 7; i++) {
+        var y = 1.15 - i * 0.38;
+        var on = (Math.sin(t * 0.0022 - i * 0.8) + 1) / 2;
+        for (k = 0; k < 2; k++) {
+          var sd = k ? 1 : -1;
+          ps.push(part(barGeo(sd * 0.3, y, 0,
+                              sd * (0.6 + on * 1.2), y + 0.25 - on * 0.1,
+                              -0.4 - on * 0.4, 0.13),
+                       [224 - on * 30, 216, 192]));
+        }
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.8, 0, 30, 0); }],
+
+    ['Clavicle', function (g, t) {
+      /* a shrug that never resolves */
+      var sh = Math.sin(t * 0.0017);
+      var ps = [], i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 12; i++) {
+          var f = i / 11;
+          var x = sd * f * 1.7;
+          var y = Math.sin(f * 4.2) * 0.3 + sd * 0 + sh * f * 0.55;
+          ps.push(part(sphGeo(x, y, Math.sin(f * 2.6) * 0.35,
+                              0.2 - Math.abs(f - 0.5) * 0.08, 4, 7),
+                       [228, 220, 196]));
+        }
+        ps.push(part(sphGeo(sd * 1.8, Math.sin(4.2) * 0.3 + sh * 0.55,
+                            Math.sin(2.6) * 0.35, 0.3, 7, 10), [212, 204, 180]));
+      }
+      ps.push(part(sphGeo(0, 0, 0, 0.26, 6, 9), [204, 196, 172]));
+      obj(g, mergeC(ps), 0.16, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Skeletal muscle', function (g, t) {
+      /* the fibres shorten in a wave, so the whole belly crawls */
+      var ps = [], i, k;
+      for (k = 0; k < 11; k++) {
+        var a = k / 11 * TAU;
+        var off = Math.sin(t * 0.0032 - k * 0.5);
+        for (i = 0; i < 13; i++) {
+          var f = i / 12;
+          var sq = 1 + off * Math.sin(f * Math.PI) * 0.3;
+          var r = (0.2 + Math.sin(f * Math.PI) * 0.62) * sq;
+          ps.push(part(sphGeo(Math.cos(a) * r, (f - 0.5) * 3.2 / sq, Math.sin(a) * r,
+                              0.13, 3, 5), [188, 44, 56]));
+        }
+      }
+      ps.push(part(lathe([[0.1, 1.85], [0.2, 1.55]], 10), [226, 216, 186]));
+      ps.push(part(lathe([[0.2, -1.55], [0.1, -1.85]], 10), [226, 216, 186]));
+      obj(g, mergeC(ps), 0.1, t * 0.0006, 0, 30, 0); }],
+
+    ['Smooth muscle', function (g, t) {
+      /* spindles sliding over each other, never all at once */
+      var ps = [], i, j;
+      for (j = 0; j < 7; j++) for (i = 0; i < 7; i++) {
+        var sl = Math.sin(t * 0.0026 + i * 0.7 + j * 1.1);
+        var x = (i - 3) * 0.42, y = (j - 3) * 0.42 + sl * 0.18;
+        ps.push(part(xfG(scG(sphGeo(0, 0, 0, 1, 5, 8), 0.34 - sl * 0.06,
+                             0.1 + sl * 0.03, 0.1), 0, 0, 0.35 + sl * 0.2,
+                         x, y, Math.sin(i + j) * 0.2), [194, 96, 106]));
+      }
+      obj(g, mergeC(ps), 0.24, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Tendon', function (g, t) {
+      /* pulled taut, let go, pulled taut again, forever */
+      var pull = (Math.sin(t * 0.0021) + 1) / 2;
+      var ps = [], i, k;
+      for (k = 0; k < 9; k++) {
+        var a = k / 9 * TAU;
+        var r = 0.28 - pull * 0.1;
+        for (i = 0; i < 16; i++) {
+          var f = i / 15;
+          var tw = (1 - pull) * Math.sin(f * 7 + k) * 0.22;
+          ps.push(part(sphGeo(Math.cos(a + f * (1 - pull) * 2) * r + tw,
+                              (f - 0.5) * (2.6 + pull * 1.0),
+                              Math.sin(a + f * (1 - pull) * 2) * r, 0.1, 3, 5),
+                       [232, 226, 200]));
+        }
+      }
+      ps.push(part(ovalGeo(0, 1.6 + pull * 0.5, 0, 0.5, 0.35, 0.45, 7, 10),
+                   [186, 46, 58]));
+      ps.push(part(ovalGeo(0, -1.6 - pull * 0.5, 0, 0.45, 0.3, 0.4, 7, 10),
+                   [220, 212, 186]));
+      obj(g, mergeC(ps), 0.1, t * 0.0006, 0, 28, 0); }],
+
+    ['Ligament', function (g, t) {
+      /* two bones being held together against their preference */
+      var st = Math.sin(t * 0.0018);
+      var ps = [part(ovalGeo(-1.3 - st * 0.4, 0.9, 0, 0.5, 0.6, 0.5, 8, 11),
+                     [226, 218, 194]),
+                part(ovalGeo(1.3 + st * 0.4, -0.9, 0, 0.5, 0.6, 0.5, 8, 11),
+                     [226, 218, 194])], i;
+      for (i = 0; i < 9; i++) {
+        var f = (i / 8 - 0.5) * 0.7;
+        ps.push(part(barGeo(-1.3 - st * 0.4 + f * 0.3, 0.7 + f * 0.6, f * 0.5,
+                            1.3 + st * 0.4 + f * 0.3, -0.7 + f * 0.6, f * 0.5,
+                            0.08 - Math.abs(st) * 0.02),
+                     [230, 216, 178]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Cartilage', function (g, t) {
+      /* a glassy pad, taking a load it does not enjoy */
+      var sq = Math.pow((Math.sin(t * 0.0017) + 1) / 2, 2);
+      var ps = [], i, j;
+      for (j = 1; j < 6; j++) for (i = 0; i < j * 5; i++) {
+        var r = j / 5.5 * 1.25, a = i / (j * 5) * TAU;
+        var bul = sq * (r / 1.25) * 0.35;
+        ps.push(part(ovalGeo(Math.cos(a) * (r + bul), 0, Math.sin(a) * (r + bul),
+                             0.16, 0.26 - sq * 0.13, 0.16, 4, 7),
+                     [176, 210, 214]));
+      }
+      ps.push(part(ovalGeo(0, 0.55 - sq * 0.2, 0, 1.2, 0.3, 1.2, 9, 13),
+                   [226, 218, 194]));
+      ps.push(part(ovalGeo(0, -0.55 + sq * 0.2, 0, 1.2, 0.3, 1.2, 9, 13),
+                   [226, 218, 194]));
+      obj(g, mergeC(ps), 0.4, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Joint', function (g, t) {
+      /* a hinge working through its full range and then some */
+      var a = Math.sin(t * 0.0015) * 1.1;
+      var ps = [part(lathe([[0.3, 1.8], [0.34, 0.6], [0.5, 0.15]], 12),
+                     [226, 218, 194]),
+                part(sphGeo(0, 0, 0, 0.62, 10, 13), [190, 220, 222])], i;
+      ps.push(part(xfG(lathe([[0.5, -0.15], [0.34, -0.6], [0.3, -1.8]], 12),
+                       0, 0, a, 0, 0, 0), [226, 218, 194]));
+      for (i = 0; i < 10; i++) {   /* synovial fluid, sloshing */
+        var b = i * 2.399 + t * 0.002;
+        ps.push(part(sphGeo(Math.cos(b) * 0.5, Math.sin(b * 1.3) * 0.35,
+                            Math.sin(b) * 0.5, 0.12, 3, 5), [216, 240, 232]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Skin', function (g, t) {
+      /* new cells rise from the bottom and flake off the top,
+         and the top is always flaking */
+      var ps = [], i, j, k;
+      for (k = 0; k < 4; k++) for (j = 0; j < 5; j++) for (i = 0; i < 5; i++) {
+        var rise = ((t * 0.0004 + (i * 3 + j * 7 + k * 11) % 13 / 13) % 1);
+        var y = -1.2 + rise * 2.4;
+        var fade = rise > 0.82 ? (1 - rise) / 0.18 : 1;
+        if (fade < 0.1) continue;
+        ps.push(part(boxGeo((i - 2) * 0.5 + (rise > 0.85 ? (rise - 0.85) * 3 : 0),
+                            y, (j - 2) * 0.5, 0.2, 0.12, 0.2),
+                     [130 + rise * 110, 80 + rise * 120, 70 + rise * 110]));
+      }
+      for (i = 0; i < 9; i++) {    /* the dermis underneath, with vessels */
+        var a = i / 9 * TAU;
+        ps.push(part(barGeo(Math.cos(a) * 1.2, -1.45, Math.sin(a) * 1.2,
+                            Math.cos(a) * 0.4, -1.0, Math.sin(a) * 0.4, 0.06),
+                     [186, 52, 62]));
+      }
+      ps.push(part(boxGeo(0, -1.55, 0, 1.4, 0.2, 1.4), [206, 150, 120]));
+      obj(g, mergeC(ps), 0.3, Math.sin(t * 0.0006) * 0.5, 0, 30, 0); }],
+
+    ['Hair follicle', function (g, t) {
+      /* it grows a hair, sheds it, and starts over, impatiently */
+      var c = (t % 3600) / 3600;
+      var L = c < 0.8 ? c / 0.8 : 0;
+      var shed = c > 0.8 ? (c - 0.8) / 0.2 : 0;
+      var ps = [], i, n = 26;
+      ps.push(part(lathe([[0.62, -0.3], [0.7, -0.95], [0.46, -1.5]], 14),
+                   [196, 130, 108]));
+      ps.push(part(sphGeo(0, -1.45, 0, 0.42, 9, 12), [178, 56, 70]));
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        if (f > L) break;
+        var w = Math.sin(f * 4 + t * 0.0022) * f * 0.45;
+        ps.push(part(sphGeo(w, -1.15 + f * 3.1, Math.cos(f * 3) * 0.25 * f,
+                            0.14, 4, 6), [58, 36, 30]));
+      }
+      if (shed > 0) for (i = 0; i < 14; i++) {
+        var f2 = i / 14;
+        ps.push(part(sphGeo(shed * 1.2 + f2 * 0.5 - 0.4,
+                            0.6 + shed * 1.4 + Math.sin(f2 * 5) * 0.3,
+                            Math.sin(f2 * 4) * 0.3, 0.13, 4, 6), [58, 36, 30]));
+      }
+      for (i = 0; i < 14; i++) {  /* the skin it sits in */
+        var a = i / 14 * TAU;
+        ps.push(part(ovalGeo(Math.cos(a) * 1.35, -0.25, Math.sin(a) * 1.35,
+                             0.28, 0.2, 0.28, 5, 8), [204, 136, 112]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 28, 0); }],
+
+    ['Nail', function (g, t) {
+      /* it advances off the end and nobody ever cuts it */
+      var adv = ((t * 0.0004) % 1);
+      var ps = [], i, j;
+      for (j = 0; j < 6; j++) for (i = 0; i < 9; i++) {
+        var x = (i / 8 - 0.5) * 1.9 + adv * 0.9;
+        var z = (j / 5 - 0.5) * 1.3;
+        var curve = -Math.pow(z / 0.65, 2) * 0.32;
+        if (x > 1.5) continue;
+        ps.push(part(boxGeo(x, curve + 0.35, z, 0.13, 0.07, 0.13),
+                     x < -0.5 ? [242, 226, 224] : [246, 224, 212]));
+      }
+      ps.push(part(xfG(scG(sphGeo(0, 0, 0, 1, 9, 12), 1.15, 0.5, 0.75),
+                       0, 0, 0, -0.2, -0.1, 0), [216, 156, 136]));
+      ps.push(part(ovalGeo(-0.95, 0.3, 0, 0.18, 0.12, 0.6, 5, 8), [236, 200, 196]));
+      obj(g, mergeC(ps), 0.5, Math.sin(t * 0.0006) * 0.6, 0, 30, 0); }],
+
+    ['Sweat gland', function (g, t) {
+      /* a coil down in the dermis, pumping steadily up the duct */
+      var ps = [], i, n = 30;
+      for (i = 0; i < n; i++) {   /* the coil */
+        var f = i / n;
+        var a = f * TAU * 3.4;
+        var R = 0.5;
+        ps.push(part(sphGeo(Math.cos(a) * R, -1.5 + f * 0.9, Math.sin(a) * R,
+                            0.13, 3, 5), [206, 184, 214]));
+      }
+      for (i = 0; i < 16; i++) {  /* the duct, spiralling up */
+        var f2 = i / 16;
+        var a2 = f2 * TAU * 1.6;
+        ps.push(part(sphGeo(Math.cos(a2) * 0.2, -0.6 + f2 * 1.9, Math.sin(a2) * 0.2,
+                            0.11, 3, 5), [222, 206, 226]));
+      }
+      for (i = 0; i < 5; i++) {   /* and the drops leaving */
+        var f3 = ((t * 0.0011 + i * 0.2) % 1);
+        ps.push(part(sphGeo(0, 1.35 + f3 * 1.0, 0, 0.18 - f3 * 0.06, 5, 8),
+                     [196, 228, 240]));
+      }
+      ps.push(part(boxGeo(0, 1.25, 0, 1.4, 0.16, 1.4), [214, 158, 134]));
+      obj(g, mergeC(ps), 0.14, t * 0.0006, 0, 28, 0); }],
+
+    ['Sebaceous gland', function (g, t) {
+      /* it fills, it overflows, it starts filling again */
+      var c = (t % 3000) / 3000;
+      var fill = c < 0.7 ? c / 0.7 : 0;
+      var ooze = c > 0.7 ? (c - 0.7) / 0.3 : 0;
+      var ps = [], i;
+      for (i = 0; i < 9; i++) {
+        var a = i / 9 * TAU;
+        ps.push(part(sphGeo(Math.cos(a) * 0.62, -0.5 + Math.sin(a) * 0.5, 0,
+                            0.3 + fill * 0.16, 5, 8), [230, 206, 138]));
+      }
+      ps.push(part(sphGeo(0, -0.5, 0, 0.42 + fill * 0.2, 8, 11), [242, 222, 150]));
+      for (i = 0; i < 7; i++) {
+        if (ooze <= 0) break;
+        var f = ((ooze + i * 0.14) % 1);
+        ps.push(part(sphGeo(Math.sin(i * 2.1) * 0.15, 0.4 + f * 1.4, 0,
+                            0.16 - f * 0.05, 4, 6), [248, 232, 176]));
+      }
+      ps.push(part(lathe([[0.22, 0.5], [0.24, 1.3]], 10), [214, 166, 140]));
+      ps.push(part(boxGeo(0, 1.4, 0, 1.3, 0.15, 1.3), [212, 154, 130]));
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0006) * 0.7, 0, 30, 0); }],
+
+    ['Adipose tissue', function (g, t) {
+      /* the cells fill and empty out of step, like slow applause */
+      var ps = [], i, n = 30;
+      for (i = 0; i < n; i++) {
+        var a = i * 2.399, r = Math.sqrt(i / n) * 1.3;
+        var b = 0.5 + 0.5 * Math.sin(t * 0.0022 + i * 1.7);
+        ps.push(part(sphGeo(Math.cos(a) * r, Math.sin(i * 1.3) * 0.8,
+                            Math.sin(a) * r, 0.2 + b * 0.22, 6, 9),
+                     [236, 214 - b * 30, 120 + b * 40]));
+      }
+      obj(g, mergeC(ps), 0.2, t * 0.0006, 0, 30, 0); }],
+
+    ['Blood', function (g, t) {
+      /* discs tumbling end over end, and the odd pale one among them */
+      var ps = [], i, n = 26;
+      for (i = 0; i < n; i++) {
+        var f = ((t * 0.0006 + i * 0.038) % 1);
+        var lane = (i % 5 - 2) * 0.55;
+        var sp = t * 0.004 + i;
+        var white = i % 9 === 0;
+        var plate = i % 7 === 3;
+        ps.push(part(xfG(scG(sphGeo(0, 0, 0, 1, 6, 10),
+                             plate ? 0.12 : 0.3, plate ? 0.06 : 0.12,
+                             plate ? 0.12 : 0.3),
+                         sp, sp * 0.7, 0,
+                         -1.7 + f * 3.4, lane + Math.sin(sp) * 0.2,
+                         Math.sin(i * 1.7) * 0.5),
+                     white ? [226, 226, 238] : plate ? [230, 190, 150]
+                           : [198, 36, 44]));
+      }
+      obj(g, mergeC(ps), 0.14, Math.sin(t * 0.0005) * 0.4, 0, 30, 0); }],
+
+    ['Compact bone', function (g, t) {
+      /* the osteons drill inward, ring by concentric ring */
+      var ps = [], i, k, j;
+      for (j = 0; j < 14; j++) {  /* the block, as a rim of tiles so the
+                                     osteons are not buried behind it */
+        var a0 = j / 14 * TAU;
+        ps.push(part(ovalGeo(Math.cos(a0) * 1.55, Math.sin(a0) * 1.55, -0.3,
+                             0.26, 0.26, 0.55, 5, 8), [196, 188, 164]));
+      }
+      for (k = 0; k < 7; k++) {
+        var a1 = k / 7 * TAU;
+        var cx = Math.cos(a1) * 0.92, cy = Math.sin(a1) * 0.92;
+        var dep = ((t * 0.0006 + k * 0.14) % 1);
+        for (i = 0; i < 3; i++) {
+          var R = 0.16 + i * 0.15;
+          ps.push(part(xfG(prismRing(R, 0.07, 14, 0.16),
+                           0, 0, 0, cx, cy, 0.4 - dep * 1.1 - i * 0.14),
+                       [238 - i * 26, 228 - i * 24, 202 - i * 22]));
+        }
+        ps.push(part(sphGeo(cx, cy, 0.5 - dep * 1.1, 0.14, 4, 6), [194, 46, 56]));
+      }
+      ps.push(part(sphGeo(0, 0, -0.1, 0.5, 9, 12), [188, 180, 158]));
+      obj(g, mergeC(ps), 0.3, t * 0.0005, 0, 30, 0); }],
+
+    ['Lens', function (g, t) {
+      /* it changes shape to focus on something that keeps moving */
+      var acc = (Math.sin(t * 0.0019) + 1) / 2;
+      var ps = [], i, j;
+      for (j = 0; j < 9; j++) for (i = 0; i < 14; i++) {
+        var lat = (j / 8 - 0.5) * Math.PI, a = i / 14 * TAU;
+        var R = 1.15;
+        ps.push(part(sphGeo(Math.cos(lat) * Math.cos(a) * R * (1 - acc * 0.16),
+                            Math.cos(lat) * Math.sin(a) * R * (1 - acc * 0.16),
+                            Math.sin(lat) * R * (0.28 + acc * 0.4), 0.1, 3, 5),
+                     [188, 224, 230]));
+      }
+      for (i = 0; i < 16; i++) {  /* the zonules holding it, under tension */
+        var b = i / 16 * TAU;
+        ps.push(part(barGeo(Math.cos(b) * R2(acc), Math.sin(b) * R2(acc), 0,
+                            Math.cos(b) * 1.75, Math.sin(b) * 1.75, 0, 0.04),
+                     [214, 226, 214]));
+      }
+      function R2(k) { return 1.15 * (1 - k * 0.16); }
+      obj(g, mergeC(ps), 0.3, t * 0.0007, 0, 30, 0); }],
+
+    ['Outer ear', function (g, t) {
+      /* a shell, and the whorl is turning the wrong way in */
+      var ps = [], i, n = 30;
+      for (i = 0; i < n; i++) {
+        var f = i / n;
+        var a = -0.6 + f * 4.6;
+        var R = 1.35 - f * 0.55;
+        var sp = Math.sin(t * 0.0018 - f * 4) * 0.12;
+        ps.push(part(sphGeo(Math.cos(a) * R * 0.78, Math.sin(a) * R,
+                            0.2 + Math.sin(f * 3) * 0.3 + sp, 0.22 - f * 0.05, 4, 7),
+                     [226, 168, 152]));
+      }
+      for (i = 0; i < 18; i++) {  /* the canal, spiralling away from you */
+        var f2 = i / 18;
+        var a2 = f2 * TAU * 1.4;
+        ps.push(part(sphGeo(Math.cos(a2) * 0.3 * (1 - f2 * 0.6) - 0.1,
+                            Math.sin(a2) * 0.3 * (1 - f2 * 0.6) - 0.1,
+                            -f2 * 1.6, 0.16 - f2 * 0.06, 4, 6),
+                     [60 + f2 * 40, 30 + f2 * 24, 34 + f2 * 26]));
+      }
+      ps.push(part(ovalGeo(-0.15, -1.35, 0.2, 0.32, 0.4, 0.28, 6, 9), [230, 172, 156]));
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0007) * 0.7, 0, 30, 0); }],
+
+    ['Placenta', function (g, t) {
+      /* a disc of branching trees, and a cord winding out of it */
+      var ps = [], i, k, j;
+      for (j = 0; j < 16; j++) {  /* the disc, as a ring of tiles */
+        var a0 = j / 16 * TAU;
+        ps.push(part(ovalGeo(Math.cos(a0) * 1.5, -0.7, Math.sin(a0) * 1.5,
+                             0.3, 0.26, 0.3, 5, 8), [126, 34, 48]));
+      }
+      for (k = 0; k < 12; k++) {
+        var a = k / 12 * TAU;
+        var cx = Math.cos(a) * 0.95, cz = Math.sin(a) * 0.95;
+        ps.push(part(barGeo(0, 0.25, 0, cx, -0.45, cz, 0.12), [168, 40, 52]));
+        for (i = 0; i < 5; i++) {
+          var b = i / 5 * TAU + t * 0.0012;
+          ps.push(part(sphGeo(cx + Math.cos(b) * 0.4, -0.5 + Math.sin(i) * 0.2,
+                              cz + Math.sin(b) * 0.4, 0.2, 4, 7), [204, 62, 70]));
+        }
+      }
+      for (i = 0; i < 18; i++) {  /* the cord, twisting up out of the middle */
+        var f = i / 18;
+        var c = f * TAU * 2 + t * 0.0016;
+        ps.push(part(sphGeo(Math.cos(c) * 0.3, 0.4 + f * 1.6, Math.sin(c) * 0.3,
+                            0.22, 4, 7), [214, 168, 150]));
+      }
+      obj(g, mergeC(ps), 0.24, t * 0.0005, 0, 28, 0); }],
+
+    ['Umbilical cord', function (g, t) {
+      /* three vessels plaited together, tightening as you watch */
+      var tw = 2.2 + Math.sin(t * 0.0011) * 1.1;
+      var ps = [], i, k;
+      for (k = 0; k < 3; k++) {
+        var ph = k * TAU / 3;
+        for (i = 0; i < 26; i++) {
+          var f = i / 26;
+          var a = ph + f * TAU * tw * 0.4 + t * 0.0014;
+          var R = 0.42;
+          ps.push(part(sphGeo(Math.cos(a) * R, -1.7 + f * 3.4, Math.sin(a) * R,
+                              0.2, 4, 7),
+                       k === 0 ? [196, 40, 50] : [74, 96, 176]));
+        }
+      }
+      obj(g, mergeC(ps), 0.1, Math.sin(t * 0.0006) * 0.6, 0, 28, 0); }],
+
+    ['Eyelid', function (g, t) {
+      /* it blinks, and now and then it forgets to open again */
+      var c = (t % 2400) / 2400;
+      var bl = c < 0.08 ? c / 0.08 : c < 0.18 ? 1 - (c - 0.08) / 0.1 : 0;
+      var stuck = Math.max(0, Math.sin(t * 0.00035) - 0.9) * 10;
+      var sh = Math.min(1, bl + stuck);
+      var ps = [part(sphGeo(0, 0, 0, 1.05, 11, 15), [238, 234, 226]),
+                part(ovalGeo(0, 0, 0.88, 0.42, 0.42, 0.2, 8, 11), [78, 118, 146]),
+                part(ovalGeo(0, 0, 0.99, 0.2, 0.2, 0.12, 6, 9), [16, 16, 24])], i;
+      for (i = 0; i < 14; i++) {  /* upper lid coming down */
+        var f = i / 13 - 0.5;
+        var y = 1.15 - sh * 1.15;
+        ps.push(part(sphGeo(f * 2.1, y + Math.cos(f * 2.6) * 0.3 - 0.3, 0.6,
+                            0.2, 4, 7), [226, 170, 158]));
+        ps.push(part(barGeo(f * 2.1, y + Math.cos(f * 2.6) * 0.3 - 0.4, 0.7,
+                            f * 2.4, y + Math.cos(f * 2.6) * 0.3 - 0.75, 1.0, 0.04),
+                     [60, 40, 36]));
+      }
+      for (i = 0; i < 14; i++) {  /* lower lid, doing much less */
+        var f2 = i / 13 - 0.5;
+        ps.push(part(sphGeo(f2 * 2.1, -1.0 - Math.cos(f2 * 2.6) * 0.2, 0.6,
+                            0.18, 4, 7), [220, 162, 150]));
+      }
+      obj(g, mergeC(ps), 0.06, Math.sin(t * 0.0008) * 0.4, 0, 30, 0); }]
+  ];
+
+
   /* Registered after the CHANNELS array is assigned: `var` hoists the
      declaration but not the value, so pushing any earlier throws. */
   for (var gi = 0; gi < G3.length; gi++) {
@@ -11545,6 +13571,12 @@
     (function (i) {
       CHANNELS.push({ name: ILL[i][0], draw: ILL[i][1] });
     }(ili));
+  }
+
+  for (var ori = 0; ori < ORGANS.length; ori++) {
+    (function (i) {
+      CHANNELS.push({ name: ORGANS[i][0], draw: ORGANS[i][1] });
+    }(ori));
   }
 
 
