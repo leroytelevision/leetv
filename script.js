@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------
-   leetv.tv — six hundred and forty-six channels of broadcast,
+   leetv.tv — six hundred and ninety-six channels of broadcast,
    all fighting through the same interference.
 
    Every channel is a scene in three dimensions. Geometry is built
@@ -10,12 +10,13 @@
    you would describe them out loud: +X right, +Y up, +Z out of the
    screen towards you.
 
-   Six kinds of channel: geometry that moves, two hundred dynamic
+   Seven kinds of channel: geometry that moves, two hundred dynamic
    geometric scenes that rebuild themselves every frame, optical
-   illusions, esoteric emblems, fifty animals looking at you, and
-   the body taken apart organ by organ. The scenes that are not
-   registered are not deleted — the arrays are all still here, and
-   the loops that used to push them are the only thing missing.
+   illusions, esoteric emblems, fifty animals looking at you, the
+   body taken apart organ by organ, and fifty mouths filling the
+   frame. The scenes that are not registered are not deleted — the
+   arrays are all still here, and the loops that used to push them
+   are the only thing missing.
 
    The compositor then rebuilds every pixel out of noise, pulling
    toward the scene colour by the current signal strength, sampling
@@ -13532,6 +13533,780 @@
   ];
 
 
+  /* ================================================================
+     MOUTHS — fifty of them, filling the frame, all talking at once.
+
+     They are variations on one routine rather than fifty separate
+     builds: a midline that can smile or scowl, a gap that opens
+     along it, a rolled tube of beads for each lip, and two rows of
+     teeth hanging off the edges of the gap. Everything a channel
+     wants to change is an option on the way in.
+
+     mouthG returns the parts list rather than drawing, so a channel
+     can push its own extras — a wire, a stud, a cigarette — before
+     merging. These sit deliberately large: a span near +/-2 units
+     at a scale of 36 fills the tube edge to edge.
+     ================================================================ */
+
+  function mo(o, k, d) { return o[k] === undefined ? d : o[k]; }
+
+  /* A smooth tube swept along a path. Each entry is
+     [x, y, z, rUp, rOut]: the radius across the path and the radius
+     toward the viewer, so a lip can be fat and shallow. Built as one
+     stitched surface because a row of separate beads reads as a row
+     of separate beads. */
+  function sweep(path, rn) {
+    var V = [], F = [], i, k, n = path.length;
+    rn = rn || 9;
+    for (i = 0; i < n; i++) {
+      var p = path[i];
+      var q = path[Math.min(n - 1, i + 1)], r = path[Math.max(0, i - 1)];
+      var dx = q[0] - r[0], dy = q[1] - r[1], dz = q[2] - r[2];
+      var L = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      dx /= L; dy /= L; dz /= L;
+      var ux = -dy, uy = dx, uz = 0;
+      var ul = Math.sqrt(ux * ux + uy * uy);
+      if (ul < 1e-6) { ux = 1; uy = 0; ul = 1; }
+      ux /= ul; uy /= ul;
+      var vx = dy * uz - dz * uy, vy = dz * ux - dx * uz, vz = dx * uy - dy * ux;
+      for (k = 0; k < rn; k++) {
+        var a = k / rn * TAU, c = Math.cos(a) * p[3], s2 = Math.sin(a) * p[4];
+        V.push([p[0] + ux * c + vx * s2,
+                p[1] + uy * c + vy * s2,
+                p[2] + uz * c + vz * s2]);
+      }
+    }
+    for (i = 0; i < n - 1; i++) for (k = 0; k < rn; k++) {
+      var k2 = (k + 1) % rn;
+      F.push([i * rn + k, (i + 1) * rn + k, (i + 1) * rn + k2, i * rn + k2]);
+    }
+    var c0 = [], c1 = [];
+    for (k = rn - 1; k >= 0; k--) c0.push(k);
+    for (k = 0; k < rn; k++) c1.push((n - 1) * rn + k);
+    F.push(c0); F.push(c1);
+    return { V: V, F: F };
+  }
+
+  function mouthG(o) {
+    var ps = [], i, u, h;
+    var W     = mo(o, 'w', 1.95);
+    var open  = mo(o, 'open', 0.3);
+    var smile = mo(o, 'smile', 0);
+    var upT   = mo(o, 'upT', 0.3);
+    var loT   = mo(o, 'loT', 0.36);
+    var bow   = mo(o, 'bow', 0.13);
+    var dep   = mo(o, 'dep', 0.5);
+    var seg   = mo(o, 'seg', 18);
+    var nT    = mo(o, 'nT', 10);
+    var tH    = mo(o, 'tH', 0.34);
+    var pointy = mo(o, 'pointy', 0);
+    var over  = mo(o, 'over', 0);
+    var crook = mo(o, 'crook', 0);
+    var lower = mo(o, 'lower', 1);
+    var tongue = mo(o, 'tongue', 0);
+    var lip   = o.lip   || [178, 46, 66];
+    var lipU  = o.lipU  || lip;
+    var gum   = o.gum   || [150, 40, 56];
+    var dark  = o.dark  || [26, 7, 12];
+    var tc    = o.tooth || [244, 240, 226];
+    var miss  = o.miss  || [];
+    var fang  = o.fang  || [];
+    var fangL = mo(o, 'fangL', 2.1);
+    var upZ   = mo(o, 'upZ', 0);
+    var loZ   = mo(o, 'loZ', 0);
+    var tint  = o.tint  || null;
+
+    function mid(x)  { return smile * x * x; }
+    function hgap(x) { return open * Math.pow(Math.max(0, 1 - x * x), 0.6); }
+    function zc(x)   { return dep * (1 - x * x * 0.8); }
+    function bowf(x) { return bow * Math.exp(-x * x * 10) * (x * x * 20 - 1); }
+    function tap(x)  { return 0.32 + 0.68 * Math.sqrt(Math.max(0, 1 - x * x)); }
+
+    /* the dark of the mouth, as slabs that tile exactly */
+    for (i = 0; i < seg; i++) {
+      u = -1 + (i + 0.5) / seg * 2; h = hgap(u);
+      if (h < 0.02) continue;
+      ps.push(part(boxGeo(u * W, mid(u), zc(u) - 0.55,
+                          W / seg * 1.02, h, 0.24), dark));
+    }
+
+    /* gums, tucked behind the teeth */
+    for (i = 0; i < seg; i++) {
+      u = -1 + (i + 0.5) / seg * 2; h = hgap(u);
+      if (h < 0.07) continue;
+      ps.push(part(boxGeo(u * W, mid(u) + h - 0.05, zc(u) - 0.36,
+                          W / seg * 1.02, 0.11, 0.16), gum));
+      if (lower)
+        ps.push(part(boxGeo(u * W, mid(u) - h + 0.05, zc(u) - 0.36,
+                            W / seg * 1.02, 0.11, 0.16), gum));
+    }
+
+    /* teeth, wide enough to touch their neighbours */
+    for (i = 0; i < nT; i++) {
+      u = -1 + (i + 0.5) / nT * 2;
+      if (miss.indexOf(i) >= 0) continue;
+      h = hgap(u);
+      if (h < 0.04) continue;
+      var isF = fang.indexOf(i) >= 0;
+      var tw = W / nT * (isF ? 0.7 : 0.86);
+      var th = Math.min(tH, h * 0.55) * (1 + over * 1.3) * (isF ? fangL : 1);
+      var cr = crook ? Math.sin(i * 12.9898) * crook : 0;
+      var col = tint ? tint(i) : tc;
+      var y0 = mid(u) + h + 0.03, z0 = zc(u) - 0.26 + upZ;
+      if (isF || pointy > 0.5)
+        ps.push(part(xfG(prism([[-tw, 0], [tw, 0], [0, -th * 2.2]], 0.15),
+                         0, 0, cr, u * W, y0, z0), col));
+      else
+        ps.push(part(xfG(boxGeo(0, -th, 0, tw, th, 0.15), 0, 0, cr,
+                         u * W, y0, z0), col));
+      if (lower) {
+        var y1 = mid(u) - h - 0.03, th2 = th * 0.84, z1 = z0 - upZ + loZ;
+        if (isF || pointy > 0.5)
+          ps.push(part(xfG(prism([[-tw, 0], [tw, 0], [0, th2 * 2.2]], 0.15),
+                           0, 0, -cr, u * W, y1, z1), col));
+        else
+          ps.push(part(xfG(boxGeo(0, th2, 0, tw, th2, 0.15), 0, 0, -cr,
+                           u * W, y1, z1), col));
+      }
+    }
+
+    if (tongue > 0)
+      ps.push(part(ovalGeo(0, mid(0) - hgap(0) * 0.52 - tongue * 0.3,
+                           zc(0) - 0.24 + tongue * 0.8,
+                           W * 0.46, 0.16 + tongue * 0.22, 0.3, 7, 10),
+                   o.tong || [202, 68, 92]));
+
+    /* the lips: two swept tubes that taper to meet at the corners */
+    var pu = [], pl = [];
+    for (i = 0; i <= seg; i++) {
+      u = -1 + i / seg * 2; h = hgap(u);
+      var tu = upT * tap(u), tl = loT * tap(u);
+      pu.push([u * W, mid(u) + h + tu + bowf(u), zc(u), tu, tu * 0.95]);
+      pl.push([u * W, mid(u) - h - tl, zc(u), tl, tl * 0.95]);
+    }
+    ps.push(part(sweep(pu, 9), lipU));
+    ps.push(part(sweep(pl, 9), lip));
+    return ps;
+  }
+
+  var MOUTHS = [
+    ['Chatterbox', function (g, t) {
+      /* it has not stopped talking since you turned the set on */
+      var sy = Math.abs(Math.sin(t * 0.0075)) * 0.62 + 0.05;
+      var ps = mouthG({ open: sy, smile: 0.1, tongue: sy > 0.4 ? 0.2 : 0 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0008) * 0.25, 0, 36, 0); }],
+
+    ['Wide grin', function (g, t) {
+      /* too many teeth and all of them on display */
+      var w2 = 1.85 + Math.sin(t * 0.0016) * 0.25;
+      var ps = mouthG({ w: w2, open: 0.34, smile: 0.42, nT: 12,
+                        upT: 0.24, loT: 0.3, tH: 0.3 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 35, 0); }],
+
+    ['Fangs', function (g, t) {
+      /* two of them come down further than the rest, slowly */
+      var dr = (Math.sin(t * 0.0013) + 1) / 2;
+      var ps = mouthG({ open: 0.5, smile: -0.06, nT: 10, tH: 0.3,
+                        fang: [2, 7], fangL: 1.5 + dr * 1.5,
+                        lip: [138, 28, 44], lipU: [124, 22, 38],
+                        tooth: [240, 236, 220] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['Gap tooth', function (g, t) {
+      /* whistling through the hole, on and off the note */
+      var wh = (Math.sin(t * 0.0021) + 1) / 2;
+      var ps = mouthG({ open: 0.2 + wh * 0.12, smile: 0.16, nT: 10,
+                        miss: [4, 5], w: 1.8 - wh * 0.25,
+                        upT: 0.32, loT: 0.4 });
+      var i;
+      for (i = 0; i < 5; i++) {       /* the note leaving */
+        var f = ((t * 0.0016 + i * 0.2) % 1);
+        ps.push(part(xfG(prismRing(0.2 + f * 0.5, 0.05, 14, 0.03), 0, 0, 0,
+                         0, 0.05, 1.1 + f * 1.8), [176, 204, 222]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 36, 0); }],
+
+    ['Braces', function (g, t) {
+      /* a wire across the whole row, and it is being tightened */
+      var ti = (Math.sin(t * 0.0012) + 1) / 2;
+      var ps = mouthG({ open: 0.38, smile: 0.22, nT: 12, tH: 0.3,
+                        crook: 0.06 - ti * 0.05 });
+      var i, nT = 12, W = 1.95;
+      for (i = 0; i < nT; i++) {
+        var u = -1 + (i + 0.5) / nT * 2;
+        var h = 0.38 * Math.pow(Math.max(0, 1 - u * u), 0.6);
+        if (h < 0.05) continue;
+        var y = 0.22 * u * u + h - 0.13;
+        var z = 0.5 * (1 - u * u * 0.8) - 0.12;
+        ps.push(part(boxGeo(u * W, y, z, 0.07, 0.07, 0.04), [196, 202, 214]));
+        ps.push(part(barGeo(u * W - 0.17, y, z, u * W + 0.17, y, z, 0.028),
+                     [216, 222, 232]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 35, 0); }],
+
+    ['Pout', function (g, t) {
+      /* it purses up for a kiss that never lands */
+      var k2 = (Math.sin(t * 0.0014) + 1) / 2;
+      var ps = mouthG({ w: 1.9 - k2 * 0.85, open: 0.1 + k2 * 0.16,
+                        smile: -0.1 * k2, upT: 0.34 + k2 * 0.2,
+                        loT: 0.42 + k2 * 0.24, bow: 0.2,
+                        dep: 0.5 + k2 * 0.7, nT: 8, tH: 0.16,
+                        lip: [212, 40, 76], lipU: [196, 32, 68] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['Snarl', function (g, t) {
+      /* the top lip keeps peeling back off the teeth */
+      var sn = Math.pow((Math.sin(t * 0.0018) + 1) / 2, 2);
+      var ps = mouthG({ open: 0.24 + sn * 0.3, smile: -0.3,
+                        upT: 0.3 - sn * 0.1, bow: 0.1 + sn * 0.34,
+                        nT: 11, pointy: 1, tH: 0.3 + sn * 0.14,
+                        lip: [150, 36, 52], gum: [178, 52, 68] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0.06, 36, 0); }],
+
+    ['Yawn', function (g, t) {
+      /* it opens further than the frame allows and takes its time */
+      var c = (t % 5000) / 5000;
+      var y2 = c < 0.45 ? Math.pow(c / 0.45, 0.7) : Math.max(0, 1 - (c - 0.45) / 0.3);
+      var ps = mouthG({ open: 0.12 + y2 * 1.15, smile: -0.12 * y2,
+                        w: 1.7 + y2 * 0.2, upT: 0.28, loT: 0.34,
+                        nT: 10, tH: 0.26, tongue: y2 * 0.55 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 34, 0); }],
+
+    ['Chewing', function (g, t) {
+      /* something in there is taking a long time to go down */
+      var c = t * 0.006;
+      var ps = mouthG({ open: 0.1 + Math.abs(Math.sin(c)) * 0.22,
+                        smile: 0.05, nT: 10,
+                        upZ: Math.sin(c * 0.5) * 0.12 });
+      obj(g, mergeC(ps), 0.05, Math.sin(c * 0.5) * 0.22, Math.sin(c) * 0.06,
+          36, 0); }],
+
+    ['Grinding teeth', function (g, t) {
+      /* side to side, all night, and it can be heard */
+      var gr = Math.sin(t * 0.009);
+      var ps = mouthG({ open: 0.13, smile: -0.06, nT: 12, tH: 0.24,
+                        lip: [166, 44, 60] });
+      var i;
+      for (i = 0; i < 5; i++) {   /* grit coming off them */
+        var f = ((t * 0.003 + i * 0.2) % 1);
+        ps.push(part(sphGeo(gr * 0.6 + (i - 2) * 0.3, 0.05 - f * 0.9,
+                            0.7 + f * 0.4, 0.05, 3, 5), [226, 220, 200]));
+      }
+      obj(g, mergeC(ps), 0.05, gr * 0.1, 0, 37, 0); }],
+
+    ['Laughing', function (g, t) {
+      /* the same four syllables over and over */
+      var c = (t * 0.0085) % TAU;
+      var ha = Math.max(0, Math.sin(c)) * Math.max(0, Math.sin(t * 0.0013));
+      var ps = mouthG({ open: 0.2 + ha * 0.72, smile: 0.34,
+                        w: 1.85, tongue: ha * 0.3, nT: 11 });
+      obj(g, mergeC(ps), 0.05 + ha * 0.1, Math.sin(t * 0.0009) * 0.3,
+          Math.sin(t * 0.0022) * 0.1, 35, 0); }],
+
+    ['Screaming', function (g, t) {
+      /* wide open and shaking with it */
+      var tr = Math.sin(t * 0.045) * 0.05;
+      var ps = mouthG({ open: 1.05 + tr, smile: -0.2, w: 1.55,
+                        upT: 0.26, loT: 0.3, nT: 10, tH: 0.24,
+                        tongue: 0.4, lip: [162, 36, 54] });
+      obj(g, mergeC(ps), 0.05, tr * 2, tr, 33, 0); }],
+
+    ['Silent scream', function (g, t) {
+      /* the same shape, and nothing coming out of it at all */
+      var ps = mouthG({ open: 0.95, smile: -0.26, w: 1.4,
+                        upT: 0.22, loT: 0.26, nT: 10, tH: 0.2,
+                        lip: [128, 42, 52], gum: [96, 30, 40],
+                        tooth: [206, 200, 186], dark: [12, 4, 8] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0004) * 0.12, 0, 33, 0); }],
+
+    ['Black lipstick', function (g, t) {
+      /* matte, and it is not smiling */
+      var ps = mouthG({ open: 0.18 + Math.abs(Math.sin(t * 0.0018)) * 0.3,
+                        smile: -0.12, upT: 0.34, loT: 0.42, bow: 0.2,
+                        lip: [34, 26, 40], lipU: [24, 18, 30],
+                        tooth: [248, 246, 238], nT: 10 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['Blue lips', function (g, t) {
+      /* too cold, and the teeth know it */
+      var ch = Math.sin(t * 0.05);
+      var ps = mouthG({ open: 0.1 + Math.abs(ch) * 0.13, smile: -0.08,
+                        lip: [74, 92, 168], lipU: [62, 78, 150],
+                        gum: [104, 84, 128], nT: 12, tH: 0.24,
+                        tooth: [228, 232, 240] });
+      obj(g, mergeC(ps), 0.05, ch * 0.05, ch * 0.03, 36, 0); }],
+
+    ['Gold grill', function (g, t) {
+      /* the whole top row, and it catches the light on purpose */
+      var ps = mouthG({ open: 0.4, smile: 0.26, nT: 10,
+                        lip: [124, 68, 60], lipU: [110, 58, 52],
+                        tint: function (i) {
+                          return [236, 190 + Math.sin(i) * 20, 70]; } });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0011) * 0.5, 0, 36, 0); }],
+
+    ['Rotten teeth', function (g, t) {
+      /* they are going one shade at a time and nobody is stopping it */
+      var rot = (Math.sin(t * 0.0006) + 1) / 2;
+      var ps = mouthG({ open: 0.34 + Math.sin(t * 0.0022) * 0.1,
+                        smile: 0.1, nT: 11, crook: 0.14,
+                        miss: [3, 8], gum: [176, 62, 62],
+                        lip: [158, 62, 62],
+                        tint: function (i) {
+                          var d = (Math.sin(i * 8.7) + 1) / 2 * rot;
+                          return [224 - d * 150, 214 - d * 160, 178 - d * 140]; } });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['Baby teeth', function (g, t) {
+      /* small, spaced, and very pleased with themselves */
+      var ps = mouthG({ open: 0.3 + Math.abs(Math.sin(t * 0.0026)) * 0.22,
+                        smile: 0.32, w: 1.6, nT: 8, tH: 0.17,
+                        upT: 0.34, loT: 0.4,
+                        lip: [216, 108, 118], lipU: [204, 96, 108],
+                        miss: [1, 6] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0012) * 0.4, 0, 36, 0); }],
+
+    ['Buck teeth', function (g, t) {
+      /* the front two come right down over the bottom lip */
+      var b = 1.5 + Math.sin(t * 0.0017) * 0.55;
+      var ps = mouthG({ open: 0.3, smile: 0.16, nT: 10, tH: 0.3,
+                        miss: [4, 5], upZ: 0.2,
+                        lip: [190, 70, 84] });
+      var k;
+      for (k = 0; k < 2; k++)
+        ps.push(part(boxGeo((k ? 0.21 : -0.21), 0.36 - b * 0.42, 0.52,
+                            0.19, b * 0.42, 0.12), [250, 246, 232]));
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 35, 0); }],
+
+    ['Shark rows', function (g, t) {
+      /* behind the first row there is another, and then another */
+      var ps = mouthG({ open: 0.62, smile: -0.05, nT: 13, pointy: 1,
+                        tH: 0.3, lip: [140, 44, 56], gum: [180, 70, 78] });
+      var r, i, W = 1.95;
+      for (r = 1; r < 3; r++) {
+        var sh = r * 0.32;
+        for (i = 0; i < 13 - r * 2; i++) {
+          var u = -1 + (i + 0.5) / (13 - r * 2) * 2;
+          var h = 0.62 * Math.pow(Math.max(0, 1 - u * u), 0.6);
+          if (h < 0.12) continue;
+          var wob = Math.sin(t * 0.0022 + r + i) * 0.04;
+          ps.push(part(xfG(prism([[-0.07, 0], [0.07, 0], [0, -0.3]], 0.1),
+                           0, 0, wob, u * W * 0.9, -0.05 * u * u + h - 0.02,
+                           -0.3 - sh), [216 - r * 30, 210 - r * 30, 192 - r * 26]));
+        }
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 35, 0); }],
+
+    ['Dentures', function (g, t) {
+      /* they do not stay where they are put */
+      var sl = Math.pow((Math.sin(t * 0.0015) + 1) / 2, 3);
+      var ps = mouthG({ open: 0.42, smile: 0.12, nT: 12, tH: 0.28,
+                        upZ: sl * 0.55, loZ: -sl * 0.2,
+                        gum: [212, 96, 104],
+                        tooth: [250, 248, 240] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 35, 0); }],
+
+    ['Toothless', function (g, t) {
+      /* gums only, and it is still trying to say something */
+      var ps = mouthG({ open: 0.18 + Math.abs(Math.sin(t * 0.0055)) * 0.42,
+                        smile: 0.1, nT: 0, w: 1.7,
+                        upT: 0.4, loT: 0.48, bow: 0.16,
+                        gum: [196, 96, 100], tongue: 0.25,
+                        lip: [190, 92, 96], lipU: [176, 80, 88] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['One tooth', function (g, t) {
+      /* and it is very proud of it */
+      var ps = mouthG({ open: 0.4 + Math.sin(t * 0.0021) * 0.14,
+                        smile: 0.3, nT: 9, lower: 0,
+                        miss: [0, 1, 2, 3, 5, 6, 7, 8], tH: 0.42,
+                        over: 0.6, gum: [198, 84, 92] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0011) * 0.45, 0, 36, 0); }],
+
+    ['Crooked teeth', function (g, t) {
+      /* no two of them agree on which way is up */
+      var ps = mouthG({ open: 0.42, smile: 0.14, nT: 11,
+                        crook: 0.42 + Math.sin(t * 0.0014) * 0.2,
+                        miss: [7], tH: 0.32 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.35, 0, 35, 0); }],
+
+    ['Chipped tooth', function (g, t) {
+      /* the corner is gone and it keeps being tongued */
+      var li = Math.max(0, Math.sin(t * 0.0016));
+      var ps = mouthG({ open: 0.38, smile: 0.18, nT: 10, miss: [4] });
+      ps.push(part(xfG(prism([[-0.16, 0.2], [0.16, 0.2], [0.16, -0.2],
+                              [-0.02, -0.2]], 0.15), 0, 0, 0,
+                       -0.19, 0.22, 0.3), [244, 240, 226]));
+      if (li > 0.1)
+        ps.push(part(ovalGeo(-0.19, 0.16 - li * 0.1, 0.42 + li * 0.2,
+                             0.16, 0.14, 0.2, 5, 8), [206, 72, 96]));
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 36, 0); }],
+
+    ['Overbite', function (g, t) {
+      /* the top row has gone on ahead without the bottom */
+      var ob = 0.35 + (Math.sin(t * 0.0015) + 1) / 2 * 0.5;
+      var ps = mouthG({ open: 0.6, smile: 0.04, nT: 11, tH: 0.32,
+                        over: 0.12, upZ: ob, loZ: -0.42,
+                        lip: [188, 68, 82] });
+      obj(g, mergeC(ps), 0.06, 0.5 + Math.sin(t * 0.0009) * 0.25, 0, 34, 0); }],
+
+    ['Underbite', function (g, t) {
+      /* and here it is the other way round */
+      var ub = 0.35 + (Math.sin(t * 0.0015 + 2) + 1) / 2 * 0.5;
+      var ps = mouthG({ open: 0.6, smile: -0.22, nT: 11, tH: 0.32,
+                        over: 0.12, loZ: ub, upZ: -0.42,
+                        lip: [188, 68, 82] });
+      obj(g, mergeC(ps), 0.06, -0.5 + Math.sin(t * 0.0009) * 0.25, 0, 34, 0); }],
+
+    ['Moustache', function (g, t) {
+      /* it moves a moment after the lip does, every time */
+      var sp = Math.sin(t * 0.0024);
+      var ps = mouthG({ open: 0.14 + Math.abs(sp) * 0.3, smile: 0.08,
+                        nT: 10, lip: [176, 70, 78] });
+      var i, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        for (i = 0; i < 13; i++) {
+          var f = i / 12;
+          var lag = Math.sin(t * 0.0024 - 0.6) * 0.12;
+          var x = sd * (0.06 + f * 1.5);
+          var y = 1.0 + Math.sin(f * 2.2) * 0.3 - f * f * 0.45 + lag * f;
+          ps.push(part(ovalGeo(x, y, 0.42 - f * 0.25,
+                               0.13, 0.19 - f * 0.08, 0.14, 4, 7),
+                       [74, 48, 34]));
+        }
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 32, 0); }],
+
+    ['Stubble', function (g, t) {
+      /* it grows back while you are watching it */
+      var gr = (t % 6000) / 6000;
+      var ps = mouthG({ open: 0.2 + Math.abs(Math.sin(t * 0.0032)) * 0.26,
+                        smile: 0.04, nT: 10, lip: [178, 84, 84] });
+      var i, n = 54;
+      for (i = 0; i < n; i++) {
+        var a = i * 2.399, r = Math.sqrt(i / n) * 2.3;
+        var x = Math.cos(a) * r, y = Math.sin(a) * r * 0.75;
+        if (Math.abs(y) < 0.55 && Math.abs(x) < 1.7) continue;
+        ps.push(part(sphGeo(x, y, 0.1, 0.045 + gr * 0.055, 3, 5),
+                     [58, 44, 38]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Tongue out', function (g, t) {
+      /* all the way out, and then it waggles */
+      var ex = 0.4 + (Math.sin(t * 0.0014) + 1) / 2 * 0.6;
+      var wg = Math.sin(t * 0.007) * ex;
+      var ps = mouthG({ open: 0.42, smile: 0.08, nT: 10, tH: 0.24 });
+      var i;
+      for (i = 0; i < 12; i++) {
+        var f = i / 11;
+        ps.push(part(ovalGeo(wg * f * 0.8, -0.1 - f * ex * 1.7,
+                             0.5 + f * ex * 1.1,
+                             0.6 - f * 0.28, 0.2, 0.3 - f * 0.12, 5, 8),
+                     [212, 76, 100]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Licking lips', function (g, t) {
+      /* round and round the outside, and it never gets all the way */
+      var a = t * 0.0024;
+      var ps = mouthG({ open: 0.22, smile: 0.1, nT: 10, tH: 0.2,
+                        lip: [206, 62, 88] });
+      var i, pth = [];
+      for (i = 0; i < 14; i++) {   /* the tip, tracing the lip line */
+        var b = a - i * 0.085;
+        var f = i / 13;
+        pth.push([Math.cos(b) * 1.6, Math.sin(b) * 0.92, 0.8 - f * 0.25,
+                  0.26 - f * 0.17, 0.2 - f * 0.13]);
+      }
+      ps.push(part(sweep(pth, 8), [216, 84, 108]));
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 33, 0); }],
+
+    ['Bubble gum', function (g, t) {
+      /* it swells until it will not, and then it does it again */
+      var c = (t % 4200) / 4200;
+      var b = c < 0.78 ? Math.pow(c / 0.78, 0.8) : 0;
+      var pop = c > 0.78 && c < 0.9 ? (c - 0.78) / 0.12 : 0;
+      var ps = mouthG({ open: 0.2, smile: 0.04, nT: 10, tH: 0.2 });
+      var i;
+      if (b > 0.02)
+        ps.push(part(sphGeo(0, -0.05, 0.6 + b * 1.0, 0.18 + b * 1.35, 11, 15),
+                     [236, 122, 168]));
+      if (pop > 0) for (i = 0; i < 14; i++) {
+        var ang = i / 14 * TAU;
+        ps.push(part(ovalGeo(Math.cos(ang) * (1.5 + pop * 1.3),
+                             Math.sin(ang) * (1.0 + pop * 0.9) - 0.05,
+                             0.8, 0.22 * (1 - pop), 0.16 * (1 - pop), 0.1, 4, 6),
+                     [236, 122, 168]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 32, 0); }],
+
+    ['Kiss', function (g, t) {
+      /* it puckers, it smacks, and it starts again */
+      var c = (t % 2000) / 2000;
+      var k2 = c < 0.7 ? Math.pow(c / 0.7, 0.6) : 1 - (c - 0.7) / 0.3;
+      var ps = mouthG({ w: 1.9 - k2 * 0.6, open: 0.08 + k2 * 0.2,
+                        upT: 0.3 + k2 * 0.12, loT: 0.36 + k2 * 0.14,
+                        dep: 0.5 + k2 * 0.55, bow: 0.22 + k2 * 0.1,
+                        nT: 8, tH: 0.12,
+                        lip: [222, 38, 84], lipU: [206, 30, 74] });
+      var i;
+      if (c > 0.7) for (i = 0; i < 4; i++) {
+        var f = (c - 0.7) / 0.3;
+        ps.push(part(xfG(prismRing(0.4 + f * 0.9 + i * 0.16, 0.05, 16, 0.03),
+                         0, 0, 0, 0, 0, 1.5 + f * 0.9 + i * 0.2),
+                     [236, 156, 186]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Blowing a candle', function (g, t) {
+      /* the flame leans away and will not go out */
+      var bl = Math.max(0, Math.sin(t * 0.0017));
+      var ps = mouthG({ w: 1.5 - bl * 0.4, open: 0.1 + bl * 0.22,
+                        upT: 0.34, loT: 0.4, dep: 0.6 + bl * 0.6,
+                        nT: 8, tH: 0.1, lip: [196, 76, 90] });
+      var i;
+      for (i = 0; i < 9; i++) {   /* the breath */
+        var f = ((t * 0.0022 + i * 0.111) % 1);
+        ps.push(part(sphGeo(Math.sin(i * 2.1) * 0.2 * f, -0.05,
+                            0.8 + f * 2.2, 0.06 + f * 0.14, 3, 5),
+                     [188, 208, 224]));
+      }
+      var lean = bl * 0.9;
+      ps.push(part(barGeo(1.5, -1.5, 1.6, 1.5, -0.3, 1.6, 0.16), [226, 214, 176]));
+      for (i = 0; i < 6; i++) {   /* the flame, bending but staying lit */
+        var f2 = i / 6;
+        ps.push(part(ovalGeo(1.5 + lean * f2 * 1.2,
+                             -0.1 + f2 * 0.55,
+                             1.6 + Math.sin(t * 0.02 + i) * 0.06,
+                             0.16 * (1 - f2 * 0.6), 0.2, 0.12, 4, 7),
+                     [255, 200 - f2 * 110, 60]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }],
+
+    ['Spitting', function (g, t) {
+      /* at intervals, and always toward the viewer */
+      var c = (t % 2600) / 2600;
+      var sp = c < 0.14 ? c / 0.14 : 0;
+      var fly = c > 0.14 ? (c - 0.14) / 0.86 : 0;
+      var ps = mouthG({ w: 1.7 - sp * 0.3, open: 0.12 + sp * 0.4,
+                        smile: -0.1, nT: 10, tH: 0.2, tongue: sp * 0.3 });
+      var i;
+      if (fly > 0) for (i = 0; i < 9; i++) {
+        var j = (fly + i * 0.04);
+        if (j > 1) continue;
+        ps.push(part(sphGeo(Math.sin(i * 2.1) * j * 0.8,
+                            -0.1 - j * j * 1.2,
+                            0.8 + j * 3.2, 0.1 + j * 0.1, 4, 6),
+                     [198, 218, 228]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 32, 0); }],
+
+    ['Gargling', function (g, t) {
+      /* the bubbles come up faster than they can be swallowed */
+      var ps = mouthG({ open: 0.55, smile: -0.06, nT: 10, tH: 0.22,
+                        dark: [42, 62, 48] });
+      var i, n = 16;
+      for (i = 0; i < n; i++) {
+        var f = ((t * 0.0016 + i * 0.0625) % 1);
+        var a = i * 2.399;
+        ps.push(part(sphGeo(Math.cos(a) * 0.9 * (1 - f * 0.4),
+                            -0.5 + f * 0.9, -0.3 + Math.sin(a) * 0.2,
+                            0.07 + f * 0.1, 4, 6), [156, 214, 176]));
+      }
+      obj(g, mergeC(ps), 0.05 + Math.sin(t * 0.004) * 0.05,
+          Math.sin(t * 0.0009) * 0.2, 0, 34, 0); }],
+
+    ['Hiccup', function (g, t) {
+      /* every four seconds, whether it likes it or not */
+      var c = (t % 4000) / 4000;
+      var hi = c < 0.06 ? Math.sin(c / 0.06 * Math.PI) : 0;
+      var ps = mouthG({ open: 0.1 + hi * 0.7, smile: 0.02 - hi * 0.2,
+                        w: 1.8 - hi * 0.2, nT: 10, tH: 0.24 });
+      obj(g, mergeC(ps), 0.05 - hi * 0.25, Math.sin(t * 0.0009) * 0.3,
+          hi * 0.12, 35, 0); }],
+
+    ['Cough', function (g, t) {
+      /* three in a row, then a pause you could drive through */
+      var c = (t % 3600) / 3600;
+      var burst = 0;
+      var i;
+      for (i = 0; i < 3; i++) {
+        var d = c - (0.05 + i * 0.09);
+        if (d > 0 && d < 0.05) burst = Math.sin(d / 0.05 * Math.PI);
+      }
+      var ps = mouthG({ open: 0.14 + burst * 0.62, smile: -0.14,
+                        w: 1.7, nT: 10, tH: 0.24, tongue: burst * 0.3 });
+      for (i = 0; i < 7; i++) {
+        if (burst < 0.15) break;
+        var f = i / 7;
+        ps.push(part(sphGeo(Math.sin(i * 2.3) * f * 0.7, -0.1,
+                            0.9 + f * 2.0 * burst, 0.1 + f * 0.16, 3, 5),
+                     [186, 196, 208]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 34, 0); }],
+
+    ['Singing', function (g, t) {
+      /* holding a note that keeps changing its mind */
+      var n2 = Math.sin(t * 0.0013);
+      var ps = mouthG({ w: 1.5 + n2 * 0.4, open: 0.55 + n2 * 0.32,
+                        smile: 0.05, upT: 0.3, loT: 0.36,
+                        nT: 10, tH: 0.2, tongue: 0.2,
+                        lip: [198, 52, 78] });
+      var i;
+      for (i = 0; i < 3; i++) {   /* the note, leaving over the top */
+        var f = ((t * 0.0013 + i * 0.334) % 1);
+        ps.push(part(xfG(prismRing(0.14 + f * 0.26, 0.05, 12, 0.03),
+                         0.5, 0, 0, 0.9 + f * 0.5, 1.0 + f * 0.5, 0.8),
+                     [196, 206 - f * 70, 236]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 33, 0); }],
+
+    ['Vowel sounds', function (g, t) {
+      /* a, e, i, o, u, and around again */
+      var v = (t * 0.0011) % 5, k = Math.floor(v), f = v - k;
+      var sh = [[1.55, 0.85, 0.05], [1.85, 0.4, 0.3], [1.95, 0.18, 0.42],
+                [1.15, 0.8, -0.05], [0.95, 0.42, -0.12]];
+      var a = sh[k], b = sh[(k + 1) % 5];
+      function mix(i) { return a[i] + (b[i] - a[i]) * f; }
+      var ps = mouthG({ w: mix(0), open: mix(1), smile: mix(2),
+                        upT: 0.3, loT: 0.38, nT: 10, tH: 0.22,
+                        dep: 0.5 + (1.95 - mix(0)) * 0.5,
+                        tongue: 0.18 });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 35, 0); }],
+
+    ['Chattering', function (g, t) {
+      /* far too fast, and it cannot stop */
+      var ch = Math.abs(Math.sin(t * 0.06));
+      var ps = mouthG({ open: 0.05 + ch * 0.3, smile: -0.06, nT: 14,
+                        tH: 0.22, w: 1.85,
+                        lip: [154, 92, 114], lipU: [140, 80, 104],
+                        tooth: [242, 244, 248] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.2,
+          Math.sin(t * 0.06) * 0.03, 36, 0); }],
+
+    ['Sneer', function (g, t) {
+      /* one corner only, and it is aimed at you */
+      var sn = (Math.sin(t * 0.0013) + 1) / 2;
+      var ps = mouthG({ open: 0.16 + sn * 0.18, smile: -0.1,
+                        bow: 0.1 + sn * 0.3, nT: 11, tH: 0.28,
+                        upT: 0.3 - sn * 0.07, lip: [166, 50, 66] });
+      var i;
+      for (i = 0; i < 6; i++) {   /* the lifted corner */
+        var f = i / 5;
+        ps.push(part(ovalGeo(1.3 + f * 0.5, 0.15 + sn * (0.3 + f * 0.5),
+                             0.3 - f * 0.1, 0.16, 0.19, 0.15, 4, 7),
+                     [176, 58, 74]));
+      }
+      obj(g, mergeC(ps), 0.05, -0.25 + Math.sin(t * 0.0009) * 0.2, 0.1, 35, 0); }],
+
+    ['Smirk', function (g, t) {
+      /* lopsided, and in no hurry to explain itself */
+      var sm = (Math.sin(t * 0.0011) + 1) / 2;
+      var ps = mouthG({ open: 0.1, smile: 0.06, nT: 10, tH: 0.2,
+                        lip: [190, 66, 84] });
+      var i;
+      for (i = 0; i < 8; i++) {
+        var f = i / 7;
+        ps.push(part(ovalGeo(0.9 + f * 1.0, -0.05 + sm * f * f * 0.75,
+                             0.34 - f * 0.14,
+                             0.17, 0.2 - f * 0.05, 0.16, 4, 7),
+                     [196, 72, 90]));
+      }
+      obj(g, mergeC(ps), 0.05, -0.3 + Math.sin(t * 0.0009) * 0.2, 0.06, 35, 0); }],
+
+    ['Frown', function (g, t) {
+      /* the corners keep going down and there is no bottom to it */
+      var fr = (Math.sin(t * 0.0009) + 1) / 2;
+      var ps = mouthG({ open: 0.08, smile: -0.35 - fr * 0.5,
+                        w: 1.75, upT: 0.32, loT: 0.44, nT: 10, tH: 0.16,
+                        lip: [172, 56, 70] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25,
+          Math.sin(t * 0.03) * 0.012, 34, 0); }],
+
+    ['Lip ring', function (g, t) {
+      /* it swings a beat behind everything the lip does */
+      var sp = Math.sin(t * 0.0026);
+      var ps = mouthG({ open: 0.16 + Math.abs(sp) * 0.28, smile: 0.04,
+                        nT: 10, lip: [148, 52, 70], lipU: [136, 44, 62] });
+      var sw = Math.sin(t * 0.0026 - 0.8) * 0.3;
+      ps.push(part(xfG(prismRing(0.34, 0.08, 14, 0.09), 0.3, 0, sw,
+                       0.35, -0.95 - Math.abs(sp) * 0.3, 0.55),
+                   [210, 214, 224]));
+      ps.push(part(sphGeo(0.35 - 0.3, -0.62 - Math.abs(sp) * 0.3, 0.62,
+                          0.11, 5, 8), [226, 230, 238]));
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Teeth falling out', function (g, t) {
+      /* one at a time, and they keep going */
+      var c = (t * 0.00035) % 1;
+      var goneN = Math.floor(c * 11);
+      var gone = [], i;
+      for (i = 0; i < goneN; i++) gone.push((i * 7) % 11);
+      var ps = mouthG({ open: 0.45, smile: 0.04, nT: 11, miss: gone,
+                        gum: [186, 74, 80] });
+      for (i = 0; i < goneN; i++) {   /* on the way down */
+        var idx = (i * 7) % 11;
+        var u = -1 + (idx + 0.5) / 11 * 2;
+        var f = Math.min(1, (c * 11 - i) * 0.5);
+        ps.push(part(xfG(boxGeo(0, 0, 0, 0.14, 0.2, 0.12),
+                         f * 5, f * 3, f * 4,
+                         u * 1.95 + f * 0.3, 0.3 - f * f * 3.2, 0.4 + f * 0.6),
+                     [238, 232, 214]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Growing teeth', function (g, t) {
+      /* there were ten a moment ago */
+      var c = (t * 0.00028) % 1;
+      var n2 = 8 + Math.floor(c * 18);
+      var ps = mouthG({ open: 0.5, smile: 0.02, nT: n2,
+                        tH: 0.36 - n2 * 0.008, crook: c * 0.3,
+                        gum: [182, 66, 74] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Clown mouth', function (g, t) {
+      /* painted well outside the lines */
+      var la = Math.abs(Math.sin(t * 0.0042));
+      var ps = [], i, pth = [];
+      for (i = 0; i <= 30; i++) {   /* the paint, one smooth band */
+        var a = i / 30 * TAU;
+        pth.push([Math.cos(a) * 2.2, Math.sin(a) * 1.3 + 0.05, -0.3, 0.3, 0.24]);
+      }
+      ps.push(part(sweep(pth, 8), [226, 24, 52]));
+      var m2 = mouthG({ open: 0.22 + la * 0.5, smile: 0.42, w: 1.7,
+                        upT: 0.26, loT: 0.32, nT: 11, tH: 0.26,
+                        lip: [226, 24, 52], lipU: [212, 18, 44] });
+      for (i = 0; i < m2.length; i++) ps.push(m2[i]);
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Chapped lips', function (g, t) {
+      /* the cracks open a little further every time it speaks */
+      var op = 0.1 + Math.abs(Math.sin(t * 0.0022)) * 0.3;
+      var ps = mouthG({ open: op, smile: 0.02, upT: 0.34, loT: 0.42,
+                        nT: 10, tH: 0.2,
+                        lip: [188, 108, 104], lipU: [176, 98, 96] });
+      var i;
+      for (i = 0; i < 16; i++) {   /* the splits */
+        var sd = i % 2 ? 1 : -1;
+        var x = (((i * 5) % 16) / 15 - 0.5) * 3.4;
+        var w2 = Math.sqrt(Math.max(0, 1 - Math.pow(x / 2, 2)));
+        var y = sd > 0 ? op * w2 + 0.3 : -op * w2 - 0.34;
+        ps.push(part(boxGeo(x, y, 0.62 * (1 - x * x / 8),
+                            0.03, 0.14 + op * 0.14, 0.05), [128, 48, 52]));
+      }
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 34, 0); }],
+
+    ['Botox', function (g, t) {
+      /* more went in than was strictly called for */
+      var sw = 0.6 + (Math.sin(t * 0.0008) + 1) / 2 * 0.75;
+      var ps = mouthG({ w: 1.75, open: 0.08 + Math.abs(Math.sin(t * 0.0026)) * 0.14,
+                        upT: 0.22 + sw * 0.4, loT: 0.26 + sw * 0.48,
+                        dep: 0.5 + sw * 0.75, bow: 0.1, nT: 10, tH: 0.14,
+                        lip: [216, 92, 118], lipU: [204, 80, 108] });
+      obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 32, 0); }]
+  ];
+
   /* Registered after the CHANNELS array is assigned: `var` hoists the
      declaration but not the value, so pushing any earlier throws. */
   for (var gi = 0; gi < G3.length; gi++) {
@@ -13577,6 +14352,12 @@
     (function (i) {
       CHANNELS.push({ name: ORGANS[i][0], draw: ORGANS[i][1] });
     }(ori));
+  }
+
+  for (var mi = 0; mi < MOUTHS.length; mi++) {
+    (function (i) {
+      CHANNELS.push({ name: MOUTHS[i][0], draw: MOUTHS[i][1] });
+    }(mi));
   }
 
 
