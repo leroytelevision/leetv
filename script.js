@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------
-   leetv.tv — six hundred and ninety-six channels of broadcast,
+   leetv.tv — seven hundred and forty-six channels of broadcast,
    all fighting through the same interference.
 
    Every channel is a scene in three dimensions. Geometry is built
@@ -10,13 +10,14 @@
    you would describe them out loud: +X right, +Y up, +Z out of the
    screen towards you.
 
-   Seven kinds of channel: geometry that moves, two hundred dynamic
+   Eight kinds of channel: geometry that moves, two hundred dynamic
    geometric scenes that rebuild themselves every frame, optical
    illusions, esoteric emblems, fifty animals looking at you, the
-   body taken apart organ by organ, and fifty mouths filling the
-   frame. The scenes that are not registered are not deleted — the
-   arrays are all still here, and the loops that used to push them
-   are the only thing missing.
+   body taken apart organ by organ, fifty mouths filling the frame,
+   and Vox, the house presenter, doing fifty different things on a
+   vector grid. The scenes that are not registered are not deleted —
+   the arrays are all still here, and the loops that used to push
+   them are the only thing missing.
 
    The compositor then rebuilds every pixel out of noise, pulling
    toward the scene colour by the current signal strength, sampling
@@ -14307,6 +14308,784 @@
       obj(g, mergeC(ps), 0.05, Math.sin(t * 0.0009) * 0.3, 0, 32, 0); }]
   ];
 
+  /* ================================================================
+     VOX — the house presenter, rendered the way a presenter would
+     have been rendered in about 1985: a head cut from flat slabs,
+     a vector grid scrolling behind him, and a signal that will not
+     hold still. He is our own, not anybody else's.
+
+     voxG returns the parts list so a channel can pass it through
+     the manglers below — burst, tear, drop — before merging.
+     ================================================================ */
+
+  function gridBG(t, col, sp, z) {
+    var ps = [], i;
+    z = z === undefined ? -2.6 : z;
+    for (i = 0; i < 9; i++) {
+      var y = -3.4 + (((i / 9) * 6.8 + t * (sp === undefined ? 0.0007 : sp) * 6.8) % 6.8);
+      ps.push(part(boxGeo(0, y, z, 3.8, 0.035, 0.035), col));
+    }
+    for (i = 0; i < 13; i++)
+      ps.push(part(boxGeo(-3.6 + i * 0.6, 0, z, 0.035, 3.4, 0.035), col));
+    return ps;
+  }
+
+  /* push every part out along its own direction from the centre */
+  function burst(ps, k) {
+    var out = [], i, j;
+    for (i = 0; i < ps.length; i++) {
+      var P = ps[i].V, cx = 0, cy = 0, cz = 0, V = [];
+      for (j = 0; j < P.length; j++) { cx += P[j][0]; cy += P[j][1]; cz += P[j][2]; }
+      cx /= P.length; cy /= P.length; cz /= P.length;
+      var d = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
+      var ox = cx / d * k * (1 + (i % 5) * 0.22);
+      var oy = cy / d * k * (1 + (i % 3) * 0.3);
+      var oz = cz / d * k;
+      for (j = 0; j < P.length; j++)
+        V.push([P[j][0] + ox, P[j][1] + oy, P[j][2] + oz]);
+      out.push({ V: V, F: ps[i].F, c: ps[i].c });
+    }
+    return out;
+  }
+
+  /* the horizontal tear: shove each vertex sideways by its height */
+  function tear(ps, amp, freq, ph) {
+    var out = [], i, j;
+    for (i = 0; i < ps.length; i++) {
+      var P = ps[i].V, V = [];
+      for (j = 0; j < P.length; j++) {
+        var q = P[j];
+        var band = Math.floor(q[1] * freq + ph);
+        var s2 = Math.sin(band * 12.9898) * 43758.5453;
+        V.push([q[0] + (s2 - Math.floor(s2) - 0.5) * amp * 2, q[1], q[2]]);
+      }
+      out.push({ V: V, F: ps[i].F, c: ps[i].c });
+    }
+    return out;
+  }
+
+  /* recolour everything through a function of the original colour */
+  function recol(ps, fn) {
+    var out = [], i;
+    for (i = 0; i < ps.length; i++)
+      out.push({ V: ps[i].V, F: ps[i].F, c: fn(ps[i].c, i) });
+    return out;
+  }
+
+  function voxG(o) {
+    o = o || {};
+    var ps = [], i;
+    var jaw  = mo(o, 'jaw', 0);
+    var eye  = mo(o, 'eye', 1);
+    var eyeR = mo(o, 'eyeR', eye);
+    var brow = mo(o, 'brow', 0);
+    var lx   = mo(o, 'lx', 0), ly = mo(o, 'ly', 0);
+    var sq   = mo(o, 'sq', 1), wd = mo(o, 'wd', 1);
+    var grin = mo(o, 'grin', 0);
+    var skin = o.skin || [96, 178, 176];
+    var dk   = o.dk   || [58, 124, 132];
+    var hair = o.hair || [42, 56, 104];
+    var trim = o.trim || [234, 198, 74];
+    var suit = o.suit || [50, 58, 108];
+
+    function B(x, y, z, w, h, d, c) {
+      ps.push(part(boxGeo(x * wd, y * sq, z, w * wd, h * sq, d), c));
+    }
+
+    /* the skull, cut from slabs */
+    B(0,  0.74, -0.04, 0.68, 0.26, 0.6,  skin);
+    B(0,  0.36,  0.04, 0.8,  0.32, 0.68, skin);
+    B(0, -0.06,  0.06, 0.76, 0.28, 0.66, skin);
+    B(0, -0.4,   0.0,  0.6,  0.2,  0.58, dk);
+    B(-0.8, 0.2, -0.06, 0.1, 0.34, 0.5, dk);     /* the sides, squared off */
+    B(0.8,  0.2, -0.06, 0.1, 0.34, 0.5, dk);
+    B(0, 0.2, -0.62, 0.7, 0.62, 0.1, dk);        /* back of the head */
+
+    /* the jaw, hinged rather than slid */
+    ps.push(part(xfG(boxGeo(0, -0.24 * sq, 0.06, 0.56 * wd, 0.24 * sq, 0.5),
+                     jaw * 0.95, 0, 0, 0, -0.48 * sq, 0), skin));
+    ps.push(part(boxGeo(0, (-0.5 - jaw * 0.34) * sq, 0.52,
+                        (0.4 + grin * 0.16) * wd, 0.035 + jaw * 0.34, 0.1),
+                 [16, 8, 22]));
+    if (grin > 0.02)                              /* a row of flat teeth */
+      for (i = 0; i < 7; i++)
+        B((i - 3) * 0.12, -0.48, 0.56, 0.05, 0.05 + grin * 0.04, 0.05,
+          [228, 236, 230]);
+
+    /* eyes */
+    for (i = 0; i < 2; i++) {
+      var sd = i ? 1 : -1;
+      var op = i ? eyeR : eye;
+      ps.push(part(ovalGeo(sd * 0.36 * wd, 0.32 * sq, 0.64,
+                           0.19 * wd, (0.035 + 0.12 * op) * sq, 0.1, 5, 8),
+                   [236, 240, 234]));
+      ps.push(part(ovalGeo((sd * 0.36 + lx * 0.1) * wd, (0.32 + ly * 0.08) * sq, 0.72,
+                           0.085, 0.085 * Math.max(0.2, op), 0.06, 4, 7),
+                   [18, 22, 42]));
+      ps.push(part(xfG(boxGeo(0, 0, 0, 0.23 * wd, 0.05 * sq, 0.07),
+                       0, 0, sd * brow * 0.55,
+                       sd * 0.36 * wd, (0.55 + brow * 0.09) * sq, 0.64), dk));
+    }
+
+    /* nose, as a wedge off the face */
+    ps.push(part(xfG(prism([[-0.09, -0.2], [0.09, -0.2], [0, 0.22]], 0.15),
+                     0, 0, 0, 0, 0.02 * sq, 0.72), skin));
+
+    /* hair: angular blocks, not strands */
+    for (i = 0; i < 5; i++)
+      B((i - 2) * 0.33, 1.0 - Math.abs(i - 2) * 0.05, 0.04, 0.16, 0.17, 0.62, hair);
+    B(0, 0.92, -0.34, 0.78, 0.26, 0.34, hair);
+
+    /* the headset band, and the nub on the end of it */
+    ps.push(part(xfG(scG(torGeo(0, 0, 0, 0.92, 0.055, 16, 5), wd, sq, 0.45),
+                     0, 0, 0, 0, 0.3 * sq, 0.1), trim));
+    ps.push(part(sphGeo(0.94 * wd, 0.36 * sq, 0.2, 0.12, 5, 8), trim));
+
+    /* neck, shoulders, collar */
+    B(0, -1.02, -0.06, 0.26, 0.22, 0.24, dk);
+    ps.push(part(xfG(prism([[-1.25, -0.55], [-0.4, 0.35], [0.4, 0.35],
+                            [1.25, -0.55]], 0.36), 0, 0, 0, 0, -1.5 * sq, 0), suit));
+    for (i = 0; i < 2; i++) {
+      var s3 = i ? 1 : -1;
+      ps.push(part(xfG(prism([[0, 0.42], [s3 * 0.44, 0.08], [0, -0.34]], 0.1),
+                       0, 0, 0, s3 * 0.2 * wd, -1.18 * sq, 0.38),
+                   o.trim2 || [214, 222, 232]));
+    }
+    return ps;
+  }
+
+  var VOX = [
+    ['Vox grins', function (g, t) {
+      /* he holds it a beat too long, every time */
+      var gr = (Math.sin(t * 0.0013) + 1) / 2;
+      var ps = gridBG(t, [180, 40, 150]);
+      var h = voxG({ grin: gr, jaw: gr * 0.18, brow: gr * 0.4,
+                     wd: 1 + gr * 0.06 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox winks', function (g, t) {
+      /* the left eye, on a cycle, at you */
+      var c = (t % 2200) / 2200;
+      var w2 = c < 0.1 ? c / 0.1 : c < 0.22 ? 1 - (c - 0.1) / 0.12 : 0;
+      var ps = gridBG(t, [60, 190, 200]);
+      var h = voxG({ eye: 1 - w2, eyeR: 1, grin: 0.5, brow: w2 * 0.5, lx: 0.2 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox stutters', function (g, t) {
+      /* the same half-second, over and over, never getting past it */
+      var st = Math.floor(t / 90) % 6;
+      var tt = t - (t % 90) - (st > 3 ? 180 : 0);
+      var ps = gridBG(tt, [200, 60, 60]);
+      var h = voxG({ jaw: Math.abs(Math.sin(tt * 0.008)) * 0.7,
+                     grin: 0.3, lx: Math.sin(tt * 0.003) * 0.5 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(tear(ps, st > 4 ? 0.12 : 0, 5, tt * 0.01)),
+          0.04, Math.sin(tt * 0.0012) * 0.4, 0, 30, 0); }],
+
+    ['Vox freezes', function (g, t) {
+      /* he locks up mid-word and then catches up all at once */
+      var c = (t % 3400) / 3400;
+      var tt = c < 0.62 ? t : t - (c - 0.62) * 3400;
+      var ps = gridBG(tt, [120, 90, 210]);
+      var h = voxG({ jaw: Math.abs(Math.sin(tt * 0.009)) * 0.75, grin: 0.2 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(tt * 0.0014) * 0.5, 0, 30, 0); }],
+
+    ['Vox rewinds', function (g, t) {
+      /* everything he did, backwards, with the bars still on it */
+      var tt = -t * 2.2;
+      var ps = gridBG(tt, [230, 120, 40], -0.0016);
+      var h = voxG({ jaw: Math.abs(Math.sin(tt * 0.009)) * 0.7,
+                     lx: Math.sin(tt * 0.004), grin: 0.25 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      ps = tear(ps, 0.1, 3.5, t * 0.02);
+      obj(g, mergeC(ps), 0.04, Math.sin(tt * 0.0015) * 0.5, 0, 30, 0); }],
+
+    ['Vox fast-forwards', function (g, t) {
+      /* six times the speed and none of it legible */
+      var tt = t * 6;
+      var ps = gridBG(tt, [90, 210, 130], 0.0022);
+      var h = voxG({ jaw: Math.abs(Math.sin(tt * 0.009)) * 0.8,
+                     lx: Math.sin(tt * 0.005), ly: Math.cos(tt * 0.004) * 0.6,
+                     grin: 0.3 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(tt * 0.0016) * 0.6, 0, 30, 0); }],
+
+    ['Vox pixellates', function (g, t) {
+      /* the resolution gives out and comes back */
+      var c = (Math.sin(t * 0.0009) + 1) / 2;
+      var ps = gridBG(t, [170, 70, 190]);
+      var h = voxG({ grin: 0.3, jaw: 0.2 }), i, j;
+      var k = 0.09 + c * 0.2;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++) {
+          var q = P[j];
+          V.push([Math.round(q[0] / k) * k, Math.round(q[1] / k) * k, q[2]]);
+        }
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox melts', function (g, t) {
+      /* the lower half gives up first */
+      var m2 = (Math.sin(t * 0.0008) + 1) / 2;
+      var ps = gridBG(t, [210, 160, 60]);
+      var h = voxG({ jaw: 0.3, eye: 0.7, grin: 0.1 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++) {
+          var q = P[j];
+          var d = Math.max(0, 1.1 - q[1]) * m2;
+          V.push([q[0] * (1 + d * 0.28), q[1] - d * d * 0.55, q[2] * (1 - d * 0.2)]);
+        }
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Vox explodes', function (g, t) {
+      /* apart, and then back together as if nothing happened */
+      var c = (t % 3000) / 3000;
+      var e = c < 0.5 ? Math.pow(c / 0.5, 0.6) : Math.pow(1 - (c - 0.5) / 0.5, 0.6);
+      var ps = gridBG(t, [220, 60, 90]);
+      var h = burst(voxG({ jaw: e * 0.6, eye: 1 - e * 0.5, grin: 0.2 }), e * 1.1);
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, t * 0.0006, 0, 29, 0); }],
+
+    ['Vox multiplies', function (g, t) {
+      /* nine of him, and they are not quite in step */
+      var ps = gridBG(t, [70, 180, 210]), i, j, k;
+      for (j = 0; j < 3; j++) for (i = 0; i < 3; i++) {
+        var ph = t + (i + j * 3) * 260;
+        var h = voxG({ jaw: Math.abs(Math.sin(ph * 0.007)) * 0.6,
+                       grin: 0.3, eye: 0.85,
+                       lx: Math.sin(ph * 0.003) * 0.7 });
+        for (k = 0; k < h.length; k++) {
+          var P = h[k].V, V = [];
+          for (var q2 = 0; q2 < P.length; q2++)
+            V.push([P[q2][0] * 0.3 + (i - 1) * 1.55,
+                    P[q2][1] * 0.3 + (1 - j) * 1.35 + 0.2,
+                    P[q2][2] * 0.3]);
+          ps.push({ V: V, F: h[k].F, c: h[k].c });
+        }
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0007) * 0.2, 0, 30, 0); }],
+
+    ['Vox rotates', function (g, t) {
+      /* straight through, all the way round, still talking */
+      var ps = gridBG(t, [150, 70, 210]);
+      var h = voxG({ jaw: Math.abs(Math.sin(t * 0.0065)) * 0.55, grin: 0.25 }), i;
+      var a = t * 0.0016;
+      for (i = 0; i < h.length; i++) ps.push(part(xfG(h[i], 0, a, 0, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, 0, 0, 30, 0); }],
+
+    ['Vox flips', function (g, t) {
+      /* end over end, and he does not acknowledge it */
+      var ps = gridBG(t, [210, 190, 60]);
+      var h = voxG({ jaw: 0.3, eye: 0.9, grin: 0.3 }), i;
+      var a = t * 0.0014;
+      for (i = 0; i < h.length; i++) ps.push(part(xfG(h[i], a, 0, 0, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0, Math.sin(t * 0.0008) * 0.3, 0, 28, 0); }],
+
+    ['Vox goes wireframe', function (g, t) {
+      /* every slab thins down to a strut along its own long axis */
+      var w2 = (Math.sin(t * 0.0008) + 1) / 2;
+      var ps = gridBG(t, [60, 220, 190]);
+      var h = voxG({ jaw: 0.25, grin: 0.3 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [], k;
+        var lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+        for (j = 0; j < P.length; j++) for (k = 0; k < 3; k++) {
+          if (P[j][k] < lo[k]) lo[k] = P[j][k];
+          if (P[j][k] > hi[k]) hi[k] = P[j][k];
+        }
+        var mid = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+        var ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+        var big = ext[0] > ext[1] ? (ext[0] > ext[2] ? 0 : 2)
+                                  : (ext[1] > ext[2] ? 1 : 2);
+        for (j = 0; j < P.length; j++) {
+          var q = [P[j][0], P[j][1], P[j][2]];
+          for (k = 0; k < 3; k++)
+            if (k !== big) q[k] = mid[k] + (q[k] - mid[k]) * (1 - w2 * 0.8);
+          V.push(q);
+        }
+        ps.push({ V: V, F: h[i].F,
+                  c: [h[i].c[0] + (90 - h[i].c[0]) * w2,
+                      h[i].c[1] + (240 - h[i].c[1]) * w2,
+                      h[i].c[2] + (200 - h[i].c[2]) * w2] });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.35, 0, 30, 0); }],
+
+    ['Vox loses his head', function (g, t) {
+      /* it lifts off the collar and carries on regardless */
+      var li = Math.max(0, Math.sin(t * 0.0009)) * 1.5;
+      var ps = gridBG(t, [200, 80, 60]);
+      var h = voxG({ jaw: Math.abs(Math.sin(t * 0.006)) * 0.5, grin: 0.3 }), i;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, cy = 0, j;
+        for (j = 0; j < P.length; j++) cy += P[j][1];
+        cy /= P.length;
+        if (cy > -0.95) {
+          var V = [];
+          for (j = 0; j < P.length; j++)
+            V.push([P[j][0], P[j][1] + li, P[j][2]]);
+          ps.push({ V: V, F: h[i].F, c: h[i].c });
+        } else ps.push(h[i]);
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 28, 0); }],
+
+    ['Vox inverts', function (g, t) {
+      /* the colour goes and comes back a shade wrong */
+      var iv = Math.max(0, Math.sin(t * 0.0011));
+      var ps = gridBG(t, [255 - 180 * iv, 40 + 180 * iv, 150]);
+      var h = recol(voxG({ jaw: 0.3, grin: 0.4, eye: 0.9 }),
+                    function (c) {
+                      return [c[0] + (255 - 2 * c[0]) * iv,
+                              c[1] + (255 - 2 * c[1]) * iv,
+                              c[2] + (255 - 2 * c[2]) * iv]; });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox tears', function (g, t) {
+      /* the picture comes apart in bands and reassembles itself */
+      var amp = Math.max(0, Math.sin(t * 0.0013)) * 0.4;
+      var ps = gridBG(t, [230, 70, 130]);
+      var h = voxG({ jaw: 0.35, grin: 0.3 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(tear(ps, amp, 4.5, Math.floor(t * 0.02))),
+          0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox zooms', function (g, t) {
+      /* straight at the lens and back out again */
+      var z = (Math.sin(t * 0.001) + 1) / 2;
+      var ps = gridBG(t, [80, 160, 230]);
+      var h = voxG({ jaw: 0.2 + z * 0.4, grin: 0.4, eye: 1 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++)
+          V.push([P[j][0], P[j][1], P[j][2] + z * 1.6]);
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }],
+
+    ['Vox shrinks', function (g, t) {
+      /* down to a dot in the corner, then back up as if nothing */
+      var s2 = 0.16 + (Math.sin(t * 0.0009) + 1) / 2 * 0.9;
+      var ps = gridBG(t, [190, 100, 220]);
+      var h = voxG({ jaw: 0.3, grin: 0.3 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++)
+          V.push([P[j][0] * s2, P[j][1] * s2, P[j][2] * s2]);
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox stretches', function (g, t) {
+      /* the head goes up and keeps going */
+      var s2 = 1 + (Math.sin(t * 0.0011) + 1) / 2 * 1.5;
+      var ps = gridBG(t, [70, 200, 170]);
+      var h = voxG({ sq: s2, jaw: 0.3, grin: 0.25 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 24, 0); }],
+
+    ['Vox squashes', function (g, t) {
+      /* flattened, and widened to make up for it */
+      var s2 = 0.35 + (Math.sin(t * 0.0013) + 1) / 2 * 0.65;
+      var ps = gridBG(t, [220, 170, 60]);
+      var h = voxG({ sq: s2, wd: 1 / Math.sqrt(s2), jaw: 0.25, grin: 0.4 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 28, 0); }],
+
+    ['Vox talks fast', function (g, t) {
+      /* more words than the jaw can carry */
+      var ps = gridBG(t, [210, 60, 170]);
+      var h = voxG({ jaw: Math.abs(Math.sin(t * 0.019)) * 0.75,
+                     grin: 0.2, lx: Math.sin(t * 0.004) * 0.6,
+                     brow: Math.sin(t * 0.011) * 0.4 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0022) * 0.3, 0, 30, 0); }],
+
+    ['Vox shouts', function (g, t) {
+      /* at full width, and the grid flinches with him */
+      var sh = Math.pow((Math.sin(t * 0.0022) + 1) / 2, 2);
+      var ps = gridBG(t, [240, 70 + sh * 120, 60], 0.0007 + sh * 0.003);
+      var h = voxG({ jaw: 0.3 + sh * 0.75, brow: -sh * 0.8, eye: 1 + sh * 0.3,
+                     wd: 1 + sh * 0.1 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04 - sh * 0.1, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }],
+
+    ['Vox laughs', function (g, t) {
+      /* four syllables, then four more */
+      var c = Math.max(0, Math.sin(t * 0.012)) * Math.max(0, Math.sin(t * 0.0016));
+      var ps = gridBG(t, [240, 170, 60]);
+      var h = voxG({ jaw: 0.2 + c * 0.7, grin: 0.6, eye: 1 - c * 0.7,
+                     brow: c * 0.5 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04 + c * 0.2, Math.sin(t * 0.0009) * 0.25,
+          Math.sin(t * 0.012) * 0.06, 30, 0); }],
+
+    ['Vox yawns', function (g, t) {
+      /* slowly, and it takes most of the channel */
+      var c = (t % 5200) / 5200;
+      var y2 = c < 0.45 ? Math.pow(c / 0.45, 0.7) : Math.max(0, 1 - (c - 0.45) / 0.3);
+      var ps = gridBG(t, [110, 130, 200]);
+      var h = voxG({ jaw: 0.1 + y2 * 1.0, eye: 1 - y2 * 0.9, brow: y2 * 0.6,
+                     sq: 1 + y2 * 0.08 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04 - y2 * 0.16, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }],
+
+    ['Vox sneezes', function (g, t) {
+      /* the build-up, and then the whole head goes with it */
+      var c = (t % 3800) / 3800;
+      var up = c < 0.6 ? c / 0.6 : 0;
+      var go = c >= 0.6 && c < 0.78 ? Math.sin((c - 0.6) / 0.18 * Math.PI) : 0;
+      var ps = gridBG(t, [90, 200, 220]);
+      var h = voxG({ jaw: up * 0.2 + go * 0.9, eye: 1 - up * 0.7 - go * 0.3,
+                     brow: up * 0.7 - go * 0.5 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      for (i = 0; i < 10; i++) {   /* what leaves him */
+        if (go < 0.1) break;
+        var f = ((go + i * 0.1) % 1);
+        ps.push(part(sphGeo(Math.sin(i * 2.1) * f * 0.8, -0.4 - f * 0.4,
+                            0.9 + f * 2.4, 0.07 + f * 0.1, 3, 5),
+                     [200, 220, 232]));
+      }
+      obj(g, mergeC(ps), 0.04 + up * 0.2 - go * 0.35,
+          Math.sin(t * 0.0009) * 0.2, 0, 29, 0); }],
+
+    ['Vox blinks', function (g, t) {
+      /* far more often than a person would */
+      var c = (t % 900) / 900;
+      var b = c < 0.09 ? c / 0.09 : c < 0.2 ? 1 - (c - 0.09) / 0.11 : 0;
+      var ps = gridBG(t, [150, 210, 90]);
+      var h = voxG({ eye: 1 - b, grin: 0.25, jaw: 0.15 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.3, 0, 30, 0); }],
+
+    ['Vox rolls his eyes', function (g, t) {
+      /* a full circuit, in front of you, deliberately */
+      var a = t * 0.0028;
+      var ps = gridBG(t, [180, 90, 200]);
+      var h = voxG({ lx: Math.cos(a), ly: Math.sin(a), eye: 1,
+                     brow: 0.3, jaw: 0.1, grin: 0.1 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Vox side-eyes', function (g, t) {
+      /* facing forward, looking somewhere else entirely */
+      var s2 = Math.sin(t * 0.0008);
+      var ps = gridBG(t, [200, 140, 70]);
+      var h = voxG({ lx: s2 > 0 ? 1 : -1, ly: -0.25, eye: 0.7,
+                     brow: 0.4, jaw: 0.06, grin: 0.15 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0006) * 0.12, 0, 30, 0); }],
+
+    ['Vox stares', function (g, t) {
+      /* no blink, no jaw, and it goes on for a while */
+      var ps = gridBG(t, [90, 110, 220], 0.00025);
+      var h = voxG({ eye: 1.15, lx: 0, ly: 0, jaw: 0.02, brow: -0.15 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.00025) * 0.06, 0, 31, 0); }],
+
+    ['Vox nods', function (g, t) {
+      /* agreeing with something you did not say */
+      var n2 = Math.sin(t * 0.0038);
+      var ps = gridBG(t, [70, 200, 140]);
+      var h = voxG({ jaw: 0.1 + Math.abs(n2) * 0.2, grin: 0.35,
+                     eye: 1 - Math.abs(n2) * 0.25 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], n2 * 0.3, 0, 0, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }],
+
+    ['Vox shakes his head', function (g, t) {
+      /* and he will not be talked round */
+      var n2 = Math.sin(t * 0.0042);
+      var ps = gridBG(t, [210, 70, 80]);
+      var h = voxG({ jaw: 0.08, grin: -0.1, brow: -0.4, eye: 0.85 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0, n2 * 0.6, 0, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, 0, 0, 30, 0); }],
+
+    ['Vox raises an eyebrow', function (g, t) {
+      /* one of them, very slowly, and it stays up */
+      var b = (Math.sin(t * 0.0009) + 1) / 2;
+      var ps = gridBG(t, [140, 190, 210]);
+      var h = voxG({ brow: b * 1.6, eye: 0.85 + b * 0.3, eyeR: 0.8,
+                     lx: -0.3, jaw: 0.05, grin: 0.2 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04, -0.18 + Math.sin(t * 0.0009) * 0.15, 0, 31, 0); }],
+
+    ['Vox frowns', function (g, t) {
+      /* the brows come down and the grid goes with them */
+      var f = (Math.sin(t * 0.001) + 1) / 2;
+      var ps = gridBG(t, [120, 60, 170], 0.0004);
+      var h = voxG({ brow: -f * 1.3, eye: 0.7, jaw: 0.04, grin: -0.1,
+                     lx: 0, ly: -0.2 });
+      for (var i = 0; i < h.length; i++) ps.push(h[i]);
+      obj(g, mergeC(ps), 0.04 + f * 0.1, Math.sin(t * 0.0008) * 0.18, 0, 30, 0); }],
+
+    ['Vox smirks', function (g, t) {
+      /* lopsided, and in no hurry to explain */
+      var s2 = (Math.sin(t * 0.0011) + 1) / 2;
+      var ps = gridBG(t, [200, 110, 150]);
+      var h = voxG({ grin: s2 * 0.5, jaw: s2 * 0.1, brow: s2 * 0.6,
+                     lx: 0.5, eye: 0.85 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0, 0, s2 * 0.12, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, -0.3 + Math.sin(t * 0.0009) * 0.15, 0, 30, 0); }],
+
+    ['Vox sleeps', function (g, t) {
+      /* still broadcasting, just not awake for it */
+      var br = Math.sin(t * 0.0012);
+      var ps = gridBG(t, [70, 80, 160], 0.0002);
+      var h = voxG({ eye: 0.02, jaw: 0.12 + Math.max(0, br) * 0.2,
+                     brow: 0.2, sq: 1 + br * 0.02 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0.18, 0, -0.22, 0, 0, 0), h[i].c));
+      for (i = 0; i < 4; i++) {   /* the letter, going up */
+        var f = ((t * 0.0004 + i * 0.25) % 1);
+        var s2 = 0.09 + f * 0.1;
+        ps.push(part(boxGeo(1.1 + f * 0.7, 0.7 + f * 1.5, 0.5, s2, 0.025, 0.02),
+                     [200, 210, 240]));
+        ps.push(part(boxGeo(1.1 + f * 0.7, 0.7 + f * 1.5 + s2 * 1.6, 0.5,
+                            s2, 0.025, 0.02), [200, 210, 240]));
+        ps.push(part(xfG(boxGeo(0, 0, 0, 0.025, s2 * 1.2, 0.02), 0, 0, 0.7,
+                         1.1 + f * 0.7, 0.7 + f * 1.5 + s2 * 0.8, 0.5),
+                     [200, 210, 240]));
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0004) * 0.1, 0, 30, 0); }],
+
+    ['Vox wakes', function (g, t) {
+      /* all at once, and he pretends he was never out */
+      var c = (t % 4400) / 4400;
+      var w2 = c < 0.62 ? 0 : Math.min(1, (c - 0.62) / 0.06);
+      var ps = gridBG(t, [90, 170, 220], 0.0002 + w2 * 0.0016);
+      var h = voxG({ eye: 0.02 + w2 * 1.3, jaw: 0.12 + w2 * 0.5,
+                     brow: 0.2 + w2 * 0.9 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0.18 - w2 * 0.2, 0, -0.22 + w2 * 0.22, 0, 0, 0),
+                     h[i].c));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0006) * 0.15, 0, 30, 0); }],
+
+    ['Vox sweats', function (g, t) {
+      /* under the lights, and it is beginning to show */
+      var ps = gridBG(t, [220, 120, 60]);
+      var h = voxG({ eye: 1.1, brow: -0.3, jaw: 0.25, grin: 0.15,
+                     lx: Math.sin(t * 0.0021) * 0.6 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      for (i = 0; i < 7; i++) {
+        var f = ((t * 0.0008 + i * 0.143) % 1);
+        var sd = i % 2 ? 1 : -1;
+        ps.push(part(ovalGeo(sd * (0.6 + (i % 3) * 0.12), 0.85 - f * 1.9, 0.62,
+                             0.07, 0.11, 0.07, 4, 7), [180, 220, 240]));
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Vox glitches out', function (g, t) {
+      /* the signal gives up on him in bands */
+      var amp = 0.15 + Math.abs(Math.sin(t * 0.0021)) * 0.55;
+      var ps = gridBG(t, [240, 50, 120], 0.004);
+      var h = voxG({ jaw: Math.abs(Math.sin(t * 0.014)) * 0.6,
+                     eye: 0.9, grin: 0.2 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      ps = tear(ps, amp, 7, Math.floor(t * 0.04));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0024) * 0.3, 0, 30, 0); }],
+
+    ['Vox scans', function (g, t) {
+      /* a bar goes down him and takes the colour with it */
+      var sc2 = -1.8 + ((t * 0.0011) % 1) * 4;
+      var ps = gridBG(t, [80, 220, 160]);
+      var h = voxG({ jaw: 0.2, grin: 0.3, eye: 1 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, cy = 0;
+        for (j = 0; j < P.length; j++) cy += P[j][1];
+        cy /= P.length;
+        var d = Math.max(0, 1 - Math.abs(cy - sc2) * 2.4);
+        ps.push({ V: P, F: h[i].F,
+                  c: [h[i].c[0] + (250 - h[i].c[0]) * d,
+                      h[i].c[1] + (255 - h[i].c[1]) * d,
+                      h[i].c[2] + (230 - h[i].c[2]) * d] });
+      }
+      ps.push(part(boxGeo(0, sc2, 1.0, 1.9, 0.045, 0.03), [240, 255, 230]));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Vox dissolves', function (g, t) {
+      /* slab by slab, from the top down */
+      var c = (t % 4000) / 4000;
+      var ps = gridBG(t, [170, 60, 200]);
+      var h = voxG({ jaw: 0.2, grin: 0.2, eye: 0.9 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, cy = 0;
+        for (j = 0; j < P.length; j++) cy += P[j][1];
+        cy /= P.length;
+        var go = (1.4 - cy) / 3.2;          /* the top goes first */
+        if (go < c) {
+          var f = Math.min(1, (c - go) * 5), V = [];
+          if (f > 0.98) continue;
+          for (j = 0; j < P.length; j++)
+            V.push([P[j][0] * (1 - f * 0.6), P[j][1] + f * 1.4,
+                    P[j][2] * (1 - f * 0.6)]);
+          ps.push({ V: V, F: h[i].F, c: h[i].c });
+        } else ps.push(h[i]);
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 30, 0); }],
+
+    ['Vox reassembles', function (g, t) {
+      /* the pieces come in from off-screen and find their places */
+      var c = (t % 3600) / 3600;
+      var f = c < 0.7 ? 1 - c / 0.7 : 0;
+      var ps = gridBG(t, [80, 190, 230]);
+      var h = voxG({ jaw: 0.15, grin: 0.25 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        var s2 = Math.sin(i * 12.9898) * 43758.5453; s2 -= Math.floor(s2);
+        var s3 = Math.sin(i * 78.233) * 43758.5453; s3 -= Math.floor(s3);
+        var ox = (s2 - 0.5) * 7 * f, oy = (s3 - 0.5) * 6 * f;
+        for (j = 0; j < P.length; j++)
+          V.push([P[j][0] + ox, P[j][1] + oy, P[j][2] + (s2 - 0.5) * 3 * f]);
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.25, 0, 29, 0); }],
+
+    ['Vox doubles', function (g, t) {
+      /* two of him, slightly out of register, arguing */
+      var sp = 0.35 + (Math.sin(t * 0.0012) + 1) / 2 * 0.75;
+      var ps = gridBG(t, [60, 200, 200]), i, j, k;
+      for (k = 0; k < 2; k++) {
+        var sd = k ? 1 : -1;
+        var h = voxG({ jaw: Math.abs(Math.sin(t * 0.008 + k * 2)) * 0.6,
+                       grin: 0.25, lx: -sd * 0.6,
+                       skin: k ? [176, 86, 120] : [96, 178, 176],
+                       dk: k ? [128, 54, 88] : [58, 124, 132] });
+        for (i = 0; i < h.length; i++) {
+          var P = h[i].V, V = [];
+          for (j = 0; j < P.length; j++)
+            V.push([P[j][0] * 0.78 + sd * sp, P[j][1] * 0.78, P[j][2] * 0.78
+                    - sd * 0.3]);
+          ps.push({ V: V, F: h[i].F, c: h[i].c });
+        }
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0008) * 0.2, 0, 30, 0); }],
+
+    ['Vox tilts', function (g, t) {
+      /* all the way over, and he keeps talking through it */
+      var a = Math.sin(t * 0.0011) * 0.85;
+      var ps = gridBG(t, [210, 200, 70]);
+      var h = voxG({ jaw: Math.abs(Math.sin(t * 0.007)) * 0.5, grin: 0.3 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0, 0, a, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 29, 0); }],
+
+    ['Vox leans in', function (g, t) {
+      /* closer than is comfortable, then back */
+      var l = Math.pow((Math.sin(t * 0.0009) + 1) / 2, 2);
+      var ps = gridBG(t, [200, 80, 110]);
+      var h = voxG({ jaw: 0.1 + l * 0.3, eye: 1 + l * 0.25, brow: -l * 0.4,
+                     grin: 0.2 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++)
+          V.push([P[j][0] * (1 + l * 0.35), P[j][1] * (1 + l * 0.35) - l * 0.3,
+                  P[j][2] + l * 1.1]);
+        ps.push({ V: V, F: h[i].F, c: h[i].c });
+      }
+      obj(g, mergeC(ps), 0.04 + l * 0.1, Math.sin(t * 0.0009) * 0.15, 0, 29, 0); }],
+
+    ['Vox turns away', function (g, t) {
+      /* presents the back of his head and waits */
+      var a = (Math.sin(t * 0.0008) + 1) / 2 * Math.PI;
+      var ps = gridBG(t, [120, 180, 90]);
+      var h = voxG({ jaw: 0.15, grin: 0.2, lx: -0.6 }), i;
+      for (i = 0; i < h.length; i++)
+        ps.push(part(xfG(h[i], 0, a, 0, 0, 0, 0), h[i].c));
+      obj(g, mergeC(ps), 0.04, 0, 0, 30, 0); }],
+
+    ['Vox points', function (g, t) {
+      /* straight out of the screen, at you specifically */
+      var j2 = Math.pow((Math.sin(t * 0.0016) + 1) / 2, 2);
+      var ps = gridBG(t, [230, 90, 60]);
+      var h = voxG({ jaw: 0.15 + j2 * 0.4, brow: -0.5, eye: 1.1,
+                     grin: 0.15 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      var hz = 0.7 + j2 * 1.1, sk = [96, 178, 176];
+      ps.push(part(barGeo(1.3, -1.6, -0.2, 0.62, -0.95, hz, 0.19),
+                   [50, 58, 108]));                       /* the arm */
+      ps.push(part(boxGeo(0.62, -0.95, hz, 0.3, 0.27, 0.27), sk));
+      ps.push(part(barGeo(0.62, -0.9, hz + 0.2, 0.34, -0.6,
+                          hz + 1.5 + j2 * 0.7, 0.11), sk));  /* the finger */
+      ps.push(part(sphGeo(0.34, -0.6, hz + 1.5 + j2 * 0.7, 0.12, 5, 8), sk));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 29, 0); }],
+
+    ['Vox waves', function (g, t) {
+      /* the same wave, forever, with no one waving back */
+      var w2 = Math.sin(t * 0.0055);
+      var ps = gridBG(t, [90, 200, 180]);
+      var h = voxG({ jaw: 0.2, grin: 0.5, eye: 0.9 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      var hx = 1.25 + w2 * 0.45, hy = -0.35 + Math.abs(w2) * 0.25;
+      ps.push(part(barGeo(1.5, -1.7, -0.1, hx, hy - 0.35, 0.7, 0.18),
+                   [50, 58, 108]));                       /* the arm */
+      ps.push(part(xfG(boxGeo(0, 0, 0, 0.34, 0.36, 0.15), 0, 0, w2 * 0.5,
+                       hx, hy, 0.8), [96, 178, 176]));
+      for (i = 0; i < 4; i++)
+        ps.push(part(xfG(boxGeo(0, 0, 0, 0.075, 0.24, 0.12), 0, 0, w2 * 0.5,
+                         hx + (i - 1.5) * 0.17 - w2 * 0.25,
+                         hy + 0.54 + (i === 0 || i === 3 ? -0.05 : 0.03), 0.8),
+                     [96, 178, 176]));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 28, 0); }],
+
+    ['Vox salutes', function (g, t) {
+      /* crisply, and for no stated reason */
+      var c = (t % 3000) / 3000;
+      var s2 = c < 0.12 ? c / 0.12 : c < 0.7 ? 1 : Math.max(0, 1 - (c - 0.7) / 0.15);
+      var ps = gridBG(t, [200, 190, 80]);
+      var h = voxG({ jaw: 0.05, brow: 0.3, eye: 1, grin: 0.35 }), i;
+      for (i = 0; i < h.length; i++) ps.push(h[i]);
+      var hx = 0.9 - s2 * 0.42, hy = -0.9 + s2 * 1.6;
+      ps.push(part(xfG(boxGeo(0, 0, 0, 0.3, 0.1, 0.22), 0, 0, -0.4 - s2 * 0.3,
+                       hx, hy, 0.7), [96, 178, 176]));
+      ps.push(part(barGeo(0.95, -1.5, 0.2, hx, hy, 0.6, 0.15), [50, 58, 108]));
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 28, 0); }],
+
+    ['Vox shrugs', function (g, t) {
+      /* the shoulders go up and nothing is resolved */
+      var s2 = Math.pow((Math.sin(t * 0.0013) + 1) / 2, 1.5);
+      var ps = gridBG(t, [150, 130, 210]);
+      var h = voxG({ jaw: 0.1, brow: s2 * 1.1, eye: 0.9, grin: -0.05 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, cy = 0, V = [];
+        for (j = 0; j < P.length; j++) cy += P[j][1];
+        cy /= P.length;
+        if (cy < -1.0) {          /* shoulders only */
+          for (j = 0; j < P.length; j++)
+            V.push([P[j][0] * (1 + s2 * 0.06), P[j][1] + s2 * 0.5, P[j][2]]);
+          ps.push({ V: V, F: h[i].F, c: h[i].c });
+        } else ps.push(h[i]);
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 29, 0); }],
+
+    ['Vox signs off', function (g, t) {
+      /* down to a line, down to a dot, and straight back on */
+      var c = (t % 4600) / 4600;
+      var o2 = c < 0.72 ? 1 : Math.max(0, 1 - (c - 0.72) / 0.14);
+      var wf = c < 0.72 ? 1 : (c < 0.82 ? 1 : Math.max(0, 1 - (c - 0.82) / 0.06));
+      var ps = gridBG(t, [60, 200, 220]);
+      var h = voxG({ jaw: 0.2 + (1 - o2) * 0.3, grin: 0.4, eye: o2 }), i, j;
+      for (i = 0; i < h.length; i++) {
+        var P = h[i].V, V = [];
+        for (j = 0; j < P.length; j++)
+          V.push([P[j][0] * wf, P[j][1] * o2, P[j][2] * wf]);
+        ps.push({ V: V, F: h[i].F,
+                  c: [h[i].c[0] + (255 - h[i].c[0]) * (1 - o2),
+                      h[i].c[1] + (255 - h[i].c[1]) * (1 - o2),
+                      h[i].c[2] + (255 - h[i].c[2]) * (1 - o2)] });
+      }
+      obj(g, mergeC(ps), 0.04, Math.sin(t * 0.0009) * 0.2, 0, 30, 0); }]
+  ];
+
   /* Registered after the CHANNELS array is assigned: `var` hoists the
      declaration but not the value, so pushing any earlier throws. */
   for (var gi = 0; gi < G3.length; gi++) {
@@ -14358,6 +15137,12 @@
     (function (i) {
       CHANNELS.push({ name: MOUTHS[i][0], draw: MOUTHS[i][1] });
     }(mi));
+  }
+
+  for (var vxi = 0; vxi < VOX.length; vxi++) {
+    (function (i) {
+      CHANNELS.push({ name: VOX[i][0], draw: VOX[i][1] });
+    }(vxi));
   }
 
 
